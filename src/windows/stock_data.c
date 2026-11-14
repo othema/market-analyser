@@ -85,27 +85,68 @@ static void draw_candlesticks(const ChartState *chart) {
     }
 }
 
-// Renders stock data and the candlestick chart for the current chart state.
+// Renders company details and the candlestick chart for the current chart state.
 // Intended to be called inside an existing ImGui window/child region.
 // Returns nothing.
 void stock_data_render(AppState *app) {
-    igTextUnformatted("Chart", NULL);
-    igSeparator();
-
     if (!app || !chart_state_has_data(&app->chart)) {
         igTextUnformatted("No data loaded. Enter a ticker and click \"View data\".", NULL);
         return;
     }
 
-    igText("Ticker: %s", app->chart.ticker[0] != '\0' ? app->chart.ticker : "N/A");
-    igText("Points: %d", app->chart.count);
+    const ChartState *chart = &app->chart;
+    const char *display_name = chart->company_name[0] != '\0' ? chart->company_name : chart->ticker;
 
-    const char *label = (app->chart.ticker[0] != '\0') ? app->chart.ticker : "OHLC";
+    // Company header: logo area on the left, details on the right.
+    if (igBeginChild_Str("CompanyHeader", (ImVec2){0.0f, 110.0f}, false, 0)) {
+        if (igBeginChild_Str("CompanyLogo", (ImVec2){100.0f, 0.0f}, true, 0)) {
+            if (chart->logo_url[0] != '\0') {
+                igTextWrapped("%s", chart->logo_url);
+            } else {
+                igTextDisabled("Logo");
+                igTextDisabled("N/A");
+            }
+        }
+        igEndChild();
+
+        igSameLine(0.0f, 8.0f);
+
+        if (igBeginChild_Str("CompanyDetails", (ImVec2){0.0f, 0.0f}, false, 0)) {
+            igTextUnformatted(display_name, NULL);
+            if (chart->has_latest_price) {
+                if (chart->currency[0] != '\0') {
+                    igText("Current price: %.2f %s", chart->latest_price, chart->currency);
+                } else {
+                    igText("Current price: %.2f", chart->latest_price);
+                }
+            } else {
+                igTextUnformatted("Current price: N/A", NULL);
+            }
+
+            igText("Ticker: %s", chart->ticker[0] != '\0' ? chart->ticker : "N/A");
+            if (chart->exchange[0] != '\0') {
+                igText("Exchange: %s", chart->exchange);
+            }
+            if (chart->sector[0] != '\0') {
+                igText("Sector: %s", chart->sector);
+            }
+            if (chart->industry[0] != '\0') {
+                igText("Industry: %s", chart->industry);
+            }
+            igText("Data points: %d", chart->count);
+        }
+        igEndChild();
+    }
+    igEndChild();
+
+    igSeparator();
+
+    const char *label = (chart->ticker[0] != '\0') ? chart->ticker : "OHLC";
     PlotVec2 size = {-1.0f, -1.0f};
     if (plot_begin(label, size, 0)) {
         double y_min = 0.0;
         double y_max = 1.0;
-        chart_get_price_bounds(&app->chart, &y_min, &y_max);
+        chart_get_price_bounds(chart, &y_min, &y_max);
 
         double padding = (y_max - y_min) * 0.05;
         if (padding <= 0.0) {
@@ -114,8 +155,8 @@ void stock_data_render(AppState *app) {
 
         plot_setup_axes("Day", "Price", 0, 0);
         // Use ImPlotCond_Always (1) so limits update when new data is loaded.
-        plot_setup_axes_limits(-1.0, (double)app->chart.count, y_min - padding, y_max + padding, 1);
-        draw_candlesticks(&app->chart);
+        plot_setup_axes_limits(-1.0, (double)chart->count, y_min - padding, y_max + padding, 1);
+        draw_candlesticks(chart);
         plot_end();
     }
 }

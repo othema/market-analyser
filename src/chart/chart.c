@@ -3,6 +3,20 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Copies a source string into a fixed destination buffer with NUL termination.
+// Returns nothing.
+static void chart_copy_string(char *dest, size_t dest_size, const char *src) {
+    if (!dest || dest_size == 0) {
+        return;
+    }
+    if (!src) {
+        dest[0] = '\0';
+        return;
+    }
+    strncpy(dest, src, dest_size - 1);
+    dest[dest_size - 1] = '\0';
+}
+
 // Initializes a ChartState to an empty, safe-to-clear state.
 // Returns nothing.
 void chart_state_init(ChartState *chart) {
@@ -10,6 +24,14 @@ void chart_state_init(ChartState *chart) {
         return;
     }
     chart->ticker[0] = '\0';
+    chart->company_name[0] = '\0';
+    chart->exchange[0] = '\0';
+    chart->currency[0] = '\0';
+    chart->sector[0] = '\0';
+    chart->industry[0] = '\0';
+    chart->logo_url[0] = '\0';
+    chart->latest_price = 0.0;
+    chart->has_latest_price = 0;
     chart->xs = NULL;
     chart->opens = NULL;
     chart->highs = NULL;
@@ -38,12 +60,7 @@ static void chart_state_set_ticker(ChartState *chart, const char *ticker) {
     if (!chart) {
         return;
     }
-    if (!ticker) {
-        chart->ticker[0] = '\0';
-        return;
-    }
-    strncpy(chart->ticker, ticker, sizeof(chart->ticker) - 1);
-    chart->ticker[sizeof(chart->ticker) - 1] = '\0';
+    chart_copy_string(chart->ticker, sizeof(chart->ticker), ticker);
 }
 
 // Replaces chart contents with OHLC data copied from a parsed time series.
@@ -95,7 +112,35 @@ bool chart_state_set_from_time_series(ChartState *chart, const char *ticker, con
     chart->closes = closes;
     chart->count = (int)count;
     chart_state_set_ticker(chart, ticker);
+
+    // Most recent point is index 0 in the original API-ordered series.
+    if (series->points[0].close > 0.0 || series->points[0].close < 0.0 || series->points[0].close == 0.0) {
+        chart->latest_price = series->points[0].close;
+        chart->has_latest_price = 1;
+    }
+
     return true;
+}
+
+// Sets company display information on the chart state.
+// Any NULL string argument clears the corresponding field.
+// Returns nothing.
+void chart_state_set_company_info(ChartState *chart,
+                                  const char *company_name,
+                                  const char *exchange,
+                                  const char *currency,
+                                  const char *sector,
+                                  const char *industry,
+                                  const char *logo_url) {
+    if (!chart) {
+        return;
+    }
+    chart_copy_string(chart->company_name, sizeof(chart->company_name), company_name);
+    chart_copy_string(chart->exchange, sizeof(chart->exchange), exchange);
+    chart_copy_string(chart->currency, sizeof(chart->currency), currency);
+    chart_copy_string(chart->sector, sizeof(chart->sector), sector);
+    chart_copy_string(chart->industry, sizeof(chart->industry), industry);
+    chart_copy_string(chart->logo_url, sizeof(chart->logo_url), logo_url);
 }
 
 // Returns true if the chart has plottable OHLC data, otherwise false.

@@ -138,13 +138,13 @@ static void app_render(AppState *app) {
         igTextUnformatted("Market Analyzer", NULL);
         igSeparator();
 
-        if (igBeginChild_Str("SelectorSection", (ImVec2){0.0f, 90.0f}, true, 0)) {
-            stock_selector_render(app, ticker, (int)sizeof(ticker));
+        if (igBeginChild_Str("ChartSection", (ImVec2){0.0f, -100.0f}, true, 0)) {
+            stock_data_render(app);
         }
         igEndChild();
 
-        if (igBeginChild_Str("ChartSection", (ImVec2){0.0f, 0.0f}, true, 0)) {
-            stock_data_render(app);
+        if (igBeginChild_Str("SelectorSection", (ImVec2){0.0f, 0.0f}, true, 0)) {
+            stock_selector_render(app, ticker, (int)sizeof(ticker));
         }
         igEndChild();
     }

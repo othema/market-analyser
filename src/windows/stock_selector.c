@@ -7,6 +7,7 @@
 #include "chart/chart.h"
 
 #include <stdio.h>
+#include <string.h>
 
 // Prints a parsed time series to stdout for quick inspection/debugging.
 // Returns nothing.
@@ -29,7 +30,7 @@ static void stock_selector_print_series(const char *ticker, const AVTimeSeries *
     }
 }
 
-// Fetches daily time-series data for a ticker and updates application chart state.
+// Fetches daily time-series data and company details for a ticker and updates chart state.
 // Returns nothing.
 static void stock_selector_fetch_and_update_chart(AppState *app, const char *ticker) {
     if (!app || !ticker || ticker[0] == '\0') {
@@ -52,9 +53,28 @@ static void stock_selector_fetch_and_update_chart(AppState *app, const char *tic
     stock_selector_print_series(ticker, &series);
     if (!chart_state_set_from_time_series(&app->chart, ticker, &series)) {
         printf("Failed to prepare chart data for %s.\n", ticker);
+        av_time_series_free(&series);
+        return;
     }
-
     av_time_series_free(&series);
+
+    // Best-effort company details (overview). Logo endpoint may require premium access.
+    AVCompanyOverview overview = {0};
+    AVStatus overview_status = av_get_company_overview(&app->av.client, ticker, &overview);
+    if (overview_status == AVOk) {
+        chart_state_set_company_info(
+            &app->chart,
+            overview.name,
+            overview.exchange,
+            overview.currency,
+            overview.sector,
+            overview.industry,
+            NULL
+        );
+    } else {
+        chart_state_set_company_info(&app->chart, NULL, NULL, NULL, NULL, NULL, NULL);
+    }
+    av_company_overview_free(&overview);
 }
 
 // Renders stock selector controls and handles fetch requests from the UI.
