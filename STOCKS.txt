@@ -1,0 +1,113 @@
+Free ways to get stock data (for use in this project)
+=====================================================
+
+This note describes a few no-cost ways to fetch stock market data so you can
+implement it yourself (e.g. in src/windows/stock_data.c). No paid plan is
+required for the basic usage below, but most free sources have rate limits and
+usage terms you should respect.
+
+Recommended: Stooq (no API key, simple CSV download)
+----------------------------------------------------
+Stooq provides historical price data as plain CSV over HTTP. It is one of the
+easiest options to integrate from C because you can download a CSV file/response
+and parse it line by line.
+
+1) Daily historical prices (OHLCV)
+   URL format:
+     https://stooq.com/q/d/l/?s=<SYMBOL>&i=d
+
+   Examples:
+     https://stooq.com/q/d/l/?s=aapl.us&i=d
+     https://stooq.com/q/d/l/?s=msft.us&i=d
+     https://stooq.com/q/d/l/?s=^spx&i=d        (S&P 500 index)
+
+   Symbol notes:
+   - US stocks typically use the ".us" suffix (e.g. aapl.us, nvda.us).
+   - Indices and other markets use Stooq-specific symbols (e.g. ^spx, ^dji).
+   - Look up the exact symbol on https://stooq.com/ if a ticker does not work.
+
+   Optional query parameters:
+     f=YYYYMMDD   start date
+     t=YYYYMMDD   end date
+
+   Example (date range):
+     https://stooq.com/q/d/l/?s=aapl.us&f=20240101&t=20241231&i=d
+
+   Response: CSV with a header row:
+     Date,Open,High,Low,Close,Volume
+     2024-01-02,185.399994,187.070007,182.550003,185.639999,82488700
+     ...
+
+   Notes:
+   - Data is usually end-of-day (not real-time).
+   - "i=d" means daily interval. Stooq also supports other intervals in some
+     contexts (e.g. intraday pages), but the daily CSV endpoint above is the
+     most straightforward for code.
+
+2) How to use it from C (implementation sketch)
+   - Fetch the URL with an HTTP client library (common choice: libcurl).
+       curl_easy_setopt(curl, CURLOPT_URL, url);
+       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, your_callback);
+       curl_easy_perform(curl);
+   - Accumulate the response into a buffer/string.
+   - Parse the CSV:
+       * Skip the header line.
+       * For each line, split on commas.
+       * Convert fields to numbers (date string, open/high/low/close as float or
+         double, volume as integer).
+   - Store the series (e.g. closing prices in an array) and pass it to
+     igPlotLines_FloatPtr in stock_data_render().
+   - Consider caching results to disk/memory so you do not download on every
+     frame.
+
+   Quick manual test from a terminal:
+     curl "https://stooq.com/q/d/l/?s=aapl.us&i=d"
+
+Alternative: Alpha Vantage (free API key, JSON/CSV API)
+-------------------------------------------------------
+Alpha Vantage is a popular free API with official documentation. It is good if
+you want a structured API, but the free tier is rate-limited.
+
+1) Get a free API key
+   - Sign up at: https://www.alphavantage.co/support/#api-key
+   - You will receive a key string to include in requests.
+
+2) Example endpoint (daily time series, compact)
+   URL:
+     https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=AAPL&apikey=YOUR_API_KEY
+
+   Useful parameters:
+     outputsize=compact   ~100 most recent data points (default)
+     outputsize=full      full-length history (larger response)
+     datatype=csv         return CSV instead of JSON
+
+   Example (CSV):
+     https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=AAPL&apikey=YOUR_API_KEY&datatype=csv
+
+3) Free-tier limits and caveats (check site for current terms)
+   - Free usage is limited (commonly a small number of requests per minute/day;
+     the exact quota can change over time).
+   - Not ideal for frequent polling; cache responses locally.
+   - Requires parsing JSON unless you request datatype=csv.
+
+Other free options (worth knowing about)
+----------------------------------------
+- Yahoo Finance: widely used, but there is no officially supported free public
+  API. Unofficial endpoints/libraries can break or be rate-limited. Use with
+  caution for anything beyond quick experiments.
+- Twelve Data / Finnhub / Tiingo: offer free tiers with API keys and documented
+  REST APIs. Good alternatives if you need features Stooq/Alpha Vantage do not
+  provide, but they have their own quotas and signup requirements.
+- Nasdaq.com: allows manual CSV downloads in a browser for some data, but is not
+  convenient for automated/programmatic fetching.
+
+Practical tips
+--------------
+- Start with Stooq daily CSV for AAPL (aapl.us) to get end-to-end fetching and
+  plotting working.
+- Normalize/scale values if needed for plotting (e.g. map prices into the
+  min/max range you pass to igPlotLines_FloatPtr).
+- Handle failures gracefully: network errors, empty responses, unknown symbols,
+  or rate-limit responses.
+- Check and follow each provider's terms of service before redistributing data
+  or using it in a non-personal project.
