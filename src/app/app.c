@@ -1,0 +1,187 @@
+#include "app/app.h"
+
+#define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
+#include "cimgui.h"
+#include "cimgui_impl.h"
+
+#include "plot/plot_c.h"
+#include "windows/stock_selector.h"
+#include "windows/stock_data.h"
+
+#include <GLFW/glfw3.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+
+static void glfw_error_callback(int error, const char *description) {
+    (void)error;
+    fprintf(stderr, "GLFW error: %s\n", description ? description : "(unknown)");
+}
+
+bool app_init(AppState *app) {
+    if (!app) {
+        return false;
+    }
+
+    app->window = NULL;
+    app->av.ready = false;
+    app->chart.prices = NULL;
+    app->chart.price_count = 0;
+    app->chart.price_min = 0.0f;
+    app->chart.price_max = 0.0f;
+    app->chart.ticker[0] = '\0';
+    app->chart.xs = NULL;
+    app->chart.opens = NULL;
+    app->chart.highs = NULL;
+    app->chart.lows = NULL;
+    app->chart.closes = NULL;
+    app->chart.ohlc_count = 0;
+
+    if (av_global_init() != AVOk) {
+        fprintf(stderr, "Failed to initialize Alpha Vantage globals\n");
+        return false;
+    }
+
+    {
+        const char *api_key = getenv("ALPHAVANTAGE_API_KEY");
+        if (av_client_init(&app->av.client, api_key) != AVOk) {
+            fprintf(stderr, "Failed to initialize Alpha Vantage client\n");
+            av_global_cleanup();
+            return false;
+        }
+        if (!api_key || api_key[0] == '\0') {
+            fprintf(stderr, "Warning: ALPHAVANTAGE_API_KEY is not set; API requests will fail\n");
+        }
+        app->av.ready = true;
+    }
+
+    glfwSetErrorCallback(glfw_error_callback);
+
+    if (!glfwInit()) {
+        fprintf(stderr, "Failed to initialize GLFW\n");
+        av_client_cleanup(&app->av.client);
+        av_global_cleanup();
+        app->av.ready = false;
+        return false;
+    }
+
+#if defined(__APPLE__)
+    const char *glsl_version = "#version 150";
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#else
+    const char *glsl_version = "#version 130";
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+#endif
+
+    app->window = glfwCreateWindow(1280, 720, "app", NULL, NULL);
+    if (!app->window) {
+        fprintf(stderr, "Failed to create GLFW window\n");
+        glfwTerminate();
+        av_client_cleanup(&app->av.client);
+        av_global_cleanup();
+        app->av.ready = false;
+        return false;
+    }
+
+    glfwMakeContextCurrent(app->window);
+    glfwSwapInterval(1);
+
+    igCreateContext(NULL);
+    plot_create_context();
+
+    ImGuiIO *io = igGetIO_Nil();
+    io->ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+    igStyleColorsDark(NULL);
+
+    ImGui_ImplGlfw_InitForOpenGL(app->window, true);
+    ImGui_ImplOpenGL3_Init(glsl_version);
+
+    return true;
+}
+
+static void app_render(AppState *app) {
+    static char ticker[16] = "";
+
+    stock_selector_render(app, ticker, (int)sizeof(ticker));
+    stock_data_render(app);
+}
+
+static void app_begin_frame(void) {
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    igNewFrame();
+}
+
+static void app_end_frame(AppState *app) {
+    igRender();
+
+    int display_w = 0;
+    int display_h = 0;
+    glfwGetFramebufferSize(app->window, &display_w, &display_h);
+    glViewport(0, 0, display_w, display_h);
+    glClearColor(0.10f, 0.10f, 0.12f, 1.00f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    ImGui_ImplOpenGL3_RenderDrawData(igGetDrawData());
+
+    glfwSwapBuffers(app->window);
+}
+
+void app_run(AppState *app) {
+    if (!app || !app->window) {
+        return;
+    }
+
+    while (!glfwWindowShouldClose(app->window)) {
+        glfwPollEvents();
+        app_begin_frame();
+        app_render(app);
+        app_end_frame(app);
+    }
+}
+
+void app_shutdown(AppState *app) {
+    if (!app) {
+        return;
+    }
+
+    if (app->window) {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        plot_destroy_context();
+        igDestroyContext(NULL);
+
+        glfwDestroyWindow(app->window);
+        app->window = NULL;
+        glfwTerminate();
+    }
+
+    if (app->av.ready) {
+        av_client_cleanup(&app->av.client);
+        av_global_cleanup();
+        app->av.ready = false;
+    }
+
+    free(app->chart.prices);
+    app->chart.prices = NULL;
+    app->chart.price_count = 0;
+    app->chart.price_min = 0.0f;
+    app->chart.price_max = 0.0f;
+    app->chart.ticker[0] = '\0';
+    free(app->chart.xs);
+    free(app->chart.opens);
+    free(app->chart.highs);
+    free(app->chart.lows);
+    free(app->chart.closes);
+    app->chart.xs = NULL;
+    app->chart.opens = NULL;
+    app->chart.highs = NULL;
+    app->chart.lows = NULL;
+    app->chart.closes = NULL;
+    app->chart.ohlc_count = 0;
+}
