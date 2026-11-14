@@ -1,0 +1,42 @@
+# Build directories
+/build/
+/cmake-build*/
+/out/
+
+# IDE/editor
+.vscode/
+.idea/
+.cache/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CMake generated (in-source builds, if any)
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+cmake_install.cmake
+CTestTestfile.cmake
+CMakeUserPresets.json
+
+# Binaries and libraries
+*.exe
+*.out
+*.app
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.o
+*.obj
+
+# Debug/profile artifacts
+*.pdb
+*.dSYM/
+
+# ImGui runtime state
+imgui.ini
+
+.env
