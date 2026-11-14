@@ -3,7 +3,8 @@
 
 #include "app/app.h"
 
-// Renders the stock data window and candlestick chart for the current chart state.
+// Renders stock data and the candlestick chart for the current chart state.
+// Intended to be called inside an existing ImGui window/child region.
 // Returns nothing.
 void stock_data_render(AppState *app);
 

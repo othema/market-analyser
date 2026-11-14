@@ -118,13 +118,37 @@ bool app_init(AppState *app) {
     return true;
 }
 
-// Renders all application windows for the current frame.
+// Renders the integrated application UI within a single main window.
 // Returns nothing.
 static void app_render(AppState *app) {
     static char ticker[16] = "";
 
-    stock_selector_render(app, ticker, (int)sizeof(ticker));
-    stock_data_render(app);
+    ImGuiIO *io = igGetIO_Nil();
+    ImVec2 display_size = io ? io->DisplaySize : (ImVec2){1280.0f, 720.0f};
+    igSetNextWindowPos((ImVec2){0.0f, 0.0f}, ImGuiCond_Always, (ImVec2){0.0f, 0.0f});
+    igSetNextWindowSize(display_size, ImGuiCond_Always);
+
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar |
+                                    ImGuiWindowFlags_NoResize |
+                                    ImGuiWindowFlags_NoMove |
+                                    ImGuiWindowFlags_NoCollapse |
+                                    ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+    if (igBegin("Market Analyzer", NULL, window_flags)) {
+        igTextUnformatted("Market Analyzer", NULL);
+        igSeparator();
+
+        if (igBeginChild_Str("SelectorSection", (ImVec2){0.0f, 90.0f}, true, 0)) {
+            stock_selector_render(app, ticker, (int)sizeof(ticker));
+        }
+        igEndChild();
+
+        if (igBeginChild_Str("ChartSection", (ImVec2){0.0f, 0.0f}, true, 0)) {
+            stock_data_render(app);
+        }
+        igEndChild();
+    }
+    igEnd();
 }
 
 // Begins a new ImGui frame.

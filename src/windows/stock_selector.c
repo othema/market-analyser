@@ -57,17 +57,22 @@ static void stock_selector_fetch_and_update_chart(AppState *app, const char *tic
     av_time_series_free(&series);
 }
 
-// Renders the stock selector window and handles fetch requests from the UI.
+// Renders stock selector controls and handles fetch requests from the UI.
+// Intended to be called inside an existing ImGui window/child region.
 // Returns nothing.
 void stock_selector_render(AppState *app, char *ticker, int ticker_size) {
-    igBegin("Stock Selector", NULL, 0);
-
-    igInputTextWithHint("Ticker", "AAPL", ticker, ticker_size, ImGuiInputTextFlags_None, NULL, NULL);
+    igTextUnformatted("Symbol", NULL);
+    igInputTextWithHint("##TickerInput", "AAPL", ticker, ticker_size, ImGuiInputTextFlags_None, NULL, NULL);
+    igSameLine(0.0f, -1.0f);
     if (igButton("View data", (ImVec2){0, 0})) {
         stock_selector_fetch_and_update_chart(app, ticker);
         fflush(stdout);
     }
 
-    igEnd();
+    if (app && app->av.ready) {
+        igTextDisabled("Alpha Vantage client ready");
+    } else {
+        igTextDisabled("Alpha Vantage client not initialized");
+    }
 }
 

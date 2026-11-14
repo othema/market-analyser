@@ -85,19 +85,23 @@ static void draw_candlesticks(const ChartState *chart) {
     }
 }
 
-// Renders the stock data window and candlestick chart for the current chart state.
+// Renders stock data and the candlestick chart for the current chart state.
+// Intended to be called inside an existing ImGui window/child region.
 // Returns nothing.
 void stock_data_render(AppState *app) {
-    igBegin("Stock Data", NULL, 0);
+    igTextUnformatted("Chart", NULL);
+    igSeparator();
 
     if (!app || !chart_state_has_data(&app->chart)) {
         igTextUnformatted("No data loaded. Enter a ticker and click \"View data\".", NULL);
-        igEnd();
         return;
     }
 
+    igText("Ticker: %s", app->chart.ticker[0] != '\0' ? app->chart.ticker : "N/A");
+    igText("Points: %d", app->chart.count);
+
     const char *label = (app->chart.ticker[0] != '\0') ? app->chart.ticker : "OHLC";
-    PlotVec2 size = {-1.0f, 300.0f};
+    PlotVec2 size = {-1.0f, -1.0f};
     if (plot_begin(label, size, 0)) {
         double y_min = 0.0;
         double y_max = 1.0;
@@ -114,7 +118,5 @@ void stock_data_render(AppState *app) {
         draw_candlesticks(&app->chart);
         plot_end();
     }
-
-    igEnd();
 }
 
