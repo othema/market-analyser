@@ -113,10 +113,12 @@ endif()
 
 add_library(alphavantage STATIC
   src/alphavantage/alphavantage.c
-  src/alphavantage/av_time_series.c
+  src/alphavantage/av_time_series_csv.c
+  src/alphavantage/av_time_series_api.c
   src/alphavantage/av_search.c
   src/alphavantage/av_market.c
-  src/alphavantage/av_fundamentals.c
+  src/alphavantage/av_overview.c
+  src/alphavantage/av_logo.c
   src/alphavantage/av_utils.c
 )
 
@@ -133,6 +135,7 @@ target_link_libraries(alphavantage PUBLIC
 add_executable(market-analyzer
   src/main.c
   src/app/app.c
+  src/chart/chart.c
   src/windows/stock_selector.c
   src/windows/stock_data.c
   src/plot/plot_c.cpp

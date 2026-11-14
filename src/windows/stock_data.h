@@ -3,6 +3,9 @@
 
 #include "app/app.h"
 
+// Renders the stock data window and candlestick chart for the current chart state.
+// Returns nothing.
 void stock_data_render(AppState *app);
 
-#endif /* STOCK_DATA_H */
+#endif // STOCK_DATA_H
+
