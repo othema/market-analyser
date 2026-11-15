@@ -12,7 +12,9 @@ Stock price data is fetched using a Yahoo Finance chart interface (`src/yfinance
 
 ## Architecture
 - `src/main.c` — application entry point
-- `src/app/` — app lifecycle/state orchestration
+- `src/app/` — app lifecycle, UI composition, and top-level orchestration
+- `src/platform/` — GLFW/OpenGL + ImGui/ImPlot backend setup and frame lifecycle
+- `src/fetch/` — asynchronous stock/suggestion fetching service and UI-facing status snapshots
 - `src/chart/` — chart state and OHLC data management
 - `src/windows/` — UI sections (`stock_selector`, `stock_data`)
 - `src/plot/` — C wrapper over ImPlot for C UI code

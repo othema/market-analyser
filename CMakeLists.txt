@@ -72,20 +72,27 @@ find_package(CURL REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(JSONC REQUIRED json-c)
 
-add_library(cimgui_lib STATIC
+option(MARKET_ANALYZER_ENABLE_IMPLOT_DEMO "Build ImPlot demo source into cimgui_lib" OFF)
+
+set(CIMGUI_LIB_SOURCES
   ${cimgui_SOURCE_DIR}/cimgui.cpp
   ${cimgui_SOURCE_DIR}/cimgui_impl.cpp
   ${imgui_SOURCE_DIR}/imgui.cpp
-  ${imgui_SOURCE_DIR}/imgui_demo.cpp
   ${imgui_SOURCE_DIR}/imgui_draw.cpp
   ${imgui_SOURCE_DIR}/imgui_tables.cpp
   ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+  ${imgui_SOURCE_DIR}/imgui_demo.cpp
   ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
   ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
   ${implot_SOURCE_DIR}/implot.cpp
   ${implot_SOURCE_DIR}/implot_items.cpp
-  ${implot_SOURCE_DIR}/implot_demo.cpp
 )
+
+if(MARKET_ANALYZER_ENABLE_IMPLOT_DEMO)
+  list(APPEND CIMGUI_LIB_SOURCES ${implot_SOURCE_DIR}/implot_demo.cpp)
+endif()
+
+add_library(cimgui_lib STATIC ${CIMGUI_LIB_SOURCES})
 
 target_include_directories(cimgui_lib PUBLIC
   ${cimgui_SOURCE_DIR}
@@ -132,6 +139,8 @@ add_executable(market-analyzer
   src/main.c
   src/app/app.c
   src/chart/chart.c
+  src/fetch/fetch_service.c
+  src/platform/ui_backend.c
   src/windows/stock_selector.c
   src/windows/stock_data.c
   src/plot/plot_c.cpp

@@ -4,15 +4,13 @@
 #include "cimgui.h"
 
 #include "chart/chart.h"
+#include "fetch/fetch_service.h"
 #include "plot/plot_c.h"
 
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
-// Computes vertical axis bounds for chart data and writes them to output pointers.
-// Returns nothing.
 static void chart_get_price_bounds(const ChartState *chart, double *out_min, double *out_max) {
     if (!out_min || !out_max || !chart_state_has_data(chart)) {
         if (out_min) {
@@ -38,8 +36,6 @@ static void chart_get_price_bounds(const ChartState *chart, double *out_min, dou
     *out_max = y_max;
 }
 
-// Draws candlesticks (wick and open/close body) for the loaded OHLC data.
-// Returns nothing.
 static void draw_candlesticks(const ChartState *chart) {
     if (!chart_state_has_data(chart)) {
         return;
@@ -90,34 +86,26 @@ static void draw_candlesticks(const ChartState *chart) {
     }
 }
 
-// Renders company details and the chart for the current chart state.
-// Intended to be called inside an existing ImGui window/child region.
-// Returns nothing.
 void stock_data_render(AppState *app) {
-    static int chart_type_index = 0; // 0 = Candlesticks, 1 = Line
-    static int running_avg_index = 0; // 0=Disabled, 1=10, 2=20, 3=50
+    static int chart_type_index = 0;
+    static int running_avg_index = 0;
     const char *chart_type_options[] = {"Candlesticks", "Line"};
     const char *running_avg_options[] = {"Disabled", "10", "20", "50"};
     const int running_avg_period_values[] = {0, 10, 20, 50};
-    bool loading = false;
-    char loading_text[256] = {0};
+
+    FetchStatusSnapshot status = {0};
     if (app) {
-        pthread_mutex_lock(&app->fetch.mutex);
-        loading = app->fetch.in_progress;
-        if (loading) {
-            snprintf(loading_text, sizeof(loading_text), "%s", app->fetch.status_text);
-        }
-        pthread_mutex_unlock(&app->fetch.mutex);
+        fetch_service_get_status(&app->fetch, &status);
     }
 
-    if (loading) {
-        igTextUnformatted(loading_text[0] ? loading_text : "Loading stock data...", NULL);
+    if (status.in_progress) {
+        igTextUnformatted(status.status_text[0] ? status.status_text : "Loading stock data...", NULL);
         igProgressBar(-1.0f * (float)igGetTime(), (ImVec2){-1.0f, 0.0f}, NULL);
         igSpacing();
     }
 
     if (!app || !chart_state_has_data(&app->chart)) {
-        if (!loading) {
+        if (!status.in_progress) {
             igTextUnformatted("No data loaded. Enter a ticker and click \"View data\".", NULL);
         }
         return;
@@ -126,7 +114,6 @@ void stock_data_render(AppState *app) {
     const ChartState *chart = &app->chart;
     const char *display_name = chart->company_name[0] != '\0' ? chart->company_name : chart->ticker;
 
-    // Company header details.
     if (igBeginChild_Str("CompanyHeader", (ImVec2){0.0f, 110.0f}, false, 0)) {
         if (igBeginChild_Str("CompanyDetails", (ImVec2){0.0f, 0.0f}, false, 0)) {
             igTextUnformatted(display_name, NULL);
@@ -139,7 +126,6 @@ void stock_data_render(AppState *app) {
             } else {
                 igTextUnformatted("Current price: N/A", NULL);
             }
-
 
             if (chart->exchange[0] != '\0') {
                 igText("Exchange: %s", chart->exchange);
@@ -181,11 +167,8 @@ void stock_data_render(AppState *app) {
         }
 
         plot_setup_axes("Date", "Price", 0, 0);
-        // Use time scale on X axis and fit limits to loaded data.
-        // ImAxis_X1 = 0, ImPlotScale_Time = 1 in ImPlot v0.17.
         plot_setup_axis_scale(0, 1);
 
-        // Set custom date tick labels: DD/MM, and DD/MM/YYYY when year changes.
         enum { MAX_TICKS = 8 };
         double tick_values[MAX_TICKS];
         char tick_labels[MAX_TICKS][32];
@@ -226,7 +209,6 @@ void stock_data_render(AppState *app) {
         }
 
         if (tick_count > 0) {
-            // ImAxis_X1 = 0
             plot_setup_axis_ticks(0, tick_values, tick_count, tick_label_ptrs);
         }
 
@@ -236,7 +218,6 @@ void stock_data_render(AppState *app) {
         if (x_pad <= 0.0) {
             x_pad = 86400.0;
         }
-        // Use ImPlotCond_Always (1) so limits update when new data is loaded.
         plot_setup_axes_limits(x_min - x_pad, x_max + x_pad, y_min - padding, y_max + padding, 1);
         if (chart_type_index == 1) {
             plot_plot_line("Close", chart->xs, chart->closes, chart->count, 0);
@@ -259,16 +240,14 @@ void stock_data_render(AppState *app) {
                 }
                 char avg_label[32];
                 snprintf(avg_label, sizeof(avg_label), "SMA %d", running_avg_period);
-                // Use a consistent color for running average line.
                 plot_set_next_line_style(1.00f, 0.70f, 0.20f, 1.00f, 2.0f);
                 plot_plot_line(avg_label, chart->xs, avg, chart->count, 0);
                 free(avg);
             }
         }
 
-        // Interactive hover: vertical crosshair + tooltip for nearest point.
         if (plot_is_hovered() && chart->count > 0) {
-            PlotPointD mouse = plot_get_mouse_pos(0, 3); // ImAxis_X1, ImAxis_Y1
+            PlotPointD mouse = plot_get_mouse_pos(0, 3);
             int nearest = 0;
             double best_dist = mouse.x - chart->xs[0];
             if (best_dist < 0.0) best_dist = -best_dist;
@@ -291,7 +270,6 @@ void stock_data_render(AppState *app) {
                 ImDrawList_AddLine(draw_list, (ImVec2){top.x, top.y}, (ImVec2){bot.x, bot.y}, cross_color, 1.0f);
             }
 
-            // Format date label for tooltip.
             char date_label[32] = "?";
             time_t ts = (time_t)chart->xs[nearest];
             struct tm tm_buf;
@@ -336,4 +314,3 @@ void stock_data_render(AppState *app) {
         plot_end();
     }
 }
-

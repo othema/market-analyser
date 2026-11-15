@@ -3,6 +3,10 @@
 /cmake-build*/
 /out/
 
+# Local runtime/config
+imgui.ini
+.env
+
 # IDE/editor
 .vscode/
 .idea/
@@ -35,9 +39,3 @@ CMakeUserPresets.json
 # Debug/profile artifacts
 *.pdb
 *.dSYM/
-
-# ImGui runtime state
-imgui.ini
-
-.env
-STOCKS.txt
