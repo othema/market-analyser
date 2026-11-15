@@ -2,15 +2,13 @@
 
 A C project for a stock market analyzer using [Dear ImGui](https://github.com/ocornut/imgui) through [cimgui](https://github.com/cimgui/cimgui), with GLFW/OpenGL for rendering and [ImPlot](https://github.com/epezent/implot) for charting.
 
-Stock price data is fetched using a Yahoo Finance chart interface (`src/yfinance/`) with no API key required.
+Stock price data is fetched using the Yahoo Finance chart API.
 
 ## Showcase
 ![Chart view](docs/img/showcase1.png)
 
 ## Features
-- Integrated single-window UI with selector and chart sections
-- Fetches daily OHLCV data from Yahoo Finance (`1d`, `6mo` by default)
-- Candlestick chart rendering with fitted axes
+- Candlestick/line chart rendering
 - Reusable Yahoo Finance C interface (`src/yfinance/`)
 
 ## Architecture
@@ -46,16 +44,3 @@ cmake --build build -j4
 ```bash
 ./build/market-analyzer
 ```
-
-Or:
-```bash
-cmake --build build --target run
-```
-
-## Usage
-1. Launch the app.
-2. Enter a ticker symbol (e.g. `AAPL`, `MSFT`) in the selector section.
-3. Click **View data** to fetch and display the candlestick chart and available company/chart metadata.
-
-## Notes
-- Yahoo Finance’s chart endpoint is unofficial and may change, breaking this project
