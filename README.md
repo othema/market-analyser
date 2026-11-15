@@ -4,6 +4,9 @@ A C project for a stock market analyzer using [Dear ImGui](https://github.com/oc
 
 Stock price data is fetched using a Yahoo Finance chart interface (`src/yfinance/`) with no API key required.
 
+## Showcase
+![Chart view](docs/img/showcase1.png)
+
 ## Features
 - Integrated single-window UI with selector and chart sections
 - Fetches daily OHLCV data from Yahoo Finance (`1d`, `6mo` by default)
@@ -55,5 +58,4 @@ cmake --build build --target run
 3. Click **View data** to fetch and display the candlestick chart and available company/chart metadata.
 
 ## Notes
-- Yahoo Finance’s chart endpoint is unofficial and may throttle or change; no API key is required.
-- See `STOCKS.txt` for data-source details and caveats.
+- Yahoo Finance’s chart endpoint is unofficial and may change, breaking this project
