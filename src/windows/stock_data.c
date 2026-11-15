@@ -6,6 +6,10 @@
 #include "chart/chart.h"
 #include "plot/plot_c.h"
 
+#include <pthread.h>
+#include <stdio.h>
+#include <time.h>
+
 // Computes vertical axis bounds for chart data and writes them to output pointers.
 // Returns nothing.
 static void chart_get_price_bounds(const ChartState *chart, double *out_min, double *out_max) {
@@ -89,8 +93,27 @@ static void draw_candlesticks(const ChartState *chart) {
 // Intended to be called inside an existing ImGui window/child region.
 // Returns nothing.
 void stock_data_render(AppState *app) {
+    bool loading = false;
+    char loading_text[256] = {0};
+    if (app) {
+        pthread_mutex_lock(&app->fetch.mutex);
+        loading = app->fetch.in_progress;
+        if (loading) {
+            snprintf(loading_text, sizeof(loading_text), "%s", app->fetch.status_text);
+        }
+        pthread_mutex_unlock(&app->fetch.mutex);
+    }
+
+    if (loading) {
+        igTextUnformatted(loading_text[0] ? loading_text : "Loading stock data...", NULL);
+        igProgressBar(-1.0f * (float)igGetTime(), (ImVec2){-1.0f, 0.0f}, NULL);
+        igSpacing();
+    }
+
     if (!app || !chart_state_has_data(&app->chart)) {
-        igTextUnformatted("No data loaded. Enter a ticker and click \"View data\".", NULL);
+        if (!loading) {
+            igTextUnformatted("No data loaded. Enter a ticker and click \"View data\".", NULL);
+        }
         return;
     }
 
@@ -123,9 +146,7 @@ void stock_data_render(AppState *app) {
                 igTextUnformatted("Current price: N/A", NULL);
             }
 
-            igSetWindowFontScale(1.6f);
-            igText("%s", chart->ticker[0] != '\0' ? chart->ticker : "N/A");
-            igSetWindowFontScale(1.0f);
+
             if (chart->exchange[0] != '\0') {
                 igText("Exchange: %s", chart->exchange);
             }
@@ -155,9 +176,64 @@ void stock_data_render(AppState *app) {
             padding = 1.0;
         }
 
-        plot_setup_axes("Day", "Price", 0, 0);
+        plot_setup_axes("Date", "Price", 0, 0);
+        // Use time scale on X axis and fit limits to loaded data.
+        // ImAxis_X1 = 0, ImPlotScale_Time = 1 in ImPlot v0.17.
+        plot_setup_axis_scale(0, 1);
+
+        // Set custom date tick labels: DD/MM, and DD/MM/YYYY when year changes.
+        enum { MAX_TICKS = 8 };
+        double tick_values[MAX_TICKS];
+        char tick_labels[MAX_TICKS][32];
+        const char *tick_label_ptrs[MAX_TICKS];
+        int tick_count = chart->count < MAX_TICKS ? chart->count : MAX_TICKS;
+        if (tick_count < 2) {
+            tick_count = chart->count;
+        }
+
+        int prev_year = -10000;
+        for (int t = 0; t < tick_count; t++) {
+            int idx = (tick_count == 1) ? 0 : (t * (chart->count - 1)) / (tick_count - 1);
+            if (idx < 0) idx = 0;
+            if (idx >= chart->count) idx = chart->count - 1;
+
+            tick_values[t] = chart->xs[idx];
+            time_t ts = (time_t)chart->xs[idx];
+            struct tm tm_buf;
+            struct tm *tm_info = gmtime(&ts);
+            if (tm_info) {
+                tm_buf = *tm_info;
+                tm_info = &tm_buf;
+            }
+            if (tm_info) {
+                int year = tm_info->tm_year + 1900;
+                if (t == 0 || year != prev_year) {
+                    snprintf(tick_labels[t], sizeof(tick_labels[t]), "%02d/%02d/%04d",
+                             tm_info->tm_mday, tm_info->tm_mon + 1, year);
+                } else {
+                    snprintf(tick_labels[t], sizeof(tick_labels[t]), "%02d/%02d",
+                             tm_info->tm_mday, tm_info->tm_mon + 1);
+                }
+                prev_year = year;
+            } else {
+                snprintf(tick_labels[t], sizeof(tick_labels[t]), "?");
+            }
+            tick_label_ptrs[t] = tick_labels[t];
+        }
+
+        if (tick_count > 0) {
+            // ImAxis_X1 = 0
+            plot_setup_axis_ticks(0, tick_values, tick_count, tick_label_ptrs);
+        }
+
+        double x_min = chart->xs[0];
+        double x_max = chart->xs[chart->count - 1];
+        double x_pad = (x_max - x_min) * 0.02;
+        if (x_pad <= 0.0) {
+            x_pad = 86400.0;
+        }
         // Use ImPlotCond_Always (1) so limits update when new data is loaded.
-        plot_setup_axes_limits(-1.0, (double)chart->count, y_min - padding, y_max + padding, 1);
+        plot_setup_axes_limits(x_min - x_pad, x_max + x_pad, y_min - padding, y_max + padding, 1);
         draw_candlesticks(chart);
         plot_end();
     }

@@ -2,6 +2,7 @@
 #define YF_TYPES_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -10,6 +11,7 @@ extern "C" {
 // Represents a single data point in a Yahoo Finance chart time series.
 typedef struct {
     char *date;                // Date string in YYYY-MM-DD format (UTC), heap-allocated.
+    int64_t timestamp;         // Unix timestamp in seconds (UTC).
     double open;
     double high;
     double low;

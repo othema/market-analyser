@@ -284,6 +284,7 @@ YFStatus yf_parse_chart_json(const char *json_data, YFTimeSeries *out) {
 
         YFTimeSeriesPoint *point = &points[out_count];
         point->date = date;
+        point->timestamp = json_object_get_int64(ts_value);
         point->open = open;
         point->high = high;
         point->low = low;

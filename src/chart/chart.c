@@ -97,7 +97,7 @@ bool chart_state_set_from_yf_time_series(ChartState *chart, const char *ticker, 
     // Yahoo Finance series points are already in chronological order.
     for (size_t i = 0; i < count; i++) {
         const YFTimeSeriesPoint *point = &series->points[i];
-        xs[i] = (double)i;
+        xs[i] = point->timestamp != 0 ? (double)point->timestamp : (double)i;
         opens[i] = point->open;
         highs[i] = point->high;
         lows[i] = point->low;

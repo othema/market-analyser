@@ -35,6 +35,21 @@ void plot_setup_axes(const char *x_label, const char *y_label, int x_flags, int 
     ImPlot::SetupAxes(x_label, y_label, (ImPlotAxisFlags)x_flags, (ImPlotAxisFlags)y_flags);
 }
 
+// Sets the scale for a plot axis.
+// axis: 0 = X1, 1 = X2, 2 = X3, 3 = Y1, 4 = Y2, 5 = Y3.
+// scale: ImPlotScale value (for example 1 = ImPlotScale_Time in ImPlot v0.17).
+// Returns nothing.
+void plot_setup_axis_scale(int axis, int scale) {
+    ImPlot::SetupAxisScale((ImAxis)axis, (ImPlotScale)scale);
+}
+
+// Sets custom tick positions and labels for an axis.
+// labels may be NULL to keep default labels for the provided tick positions.
+// Returns nothing.
+void plot_setup_axis_ticks(int axis, const double *values, int n_ticks, const char *const *labels) {
+    ImPlot::SetupAxisTicks((ImAxis)axis, values, n_ticks, labels, false);
+}
+
 // Sets axis limits for the current plot on X1 and Y1 axes.
 // cond controls when limits are applied (for example ImPlotCond values).
 // Returns nothing.
