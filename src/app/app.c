@@ -99,6 +99,10 @@ static void *app_fetch_thread_main(void *arg) {
 
     YFTimeSeries series = {0};
     YFStatus status = yf_get_time_series(&app->yf.client, ticker, interval, range, &series);
+    if (status == YFOk) {
+        // Best-effort enrichment for company name/sector/industry/exchange.
+        (void)yf_enrich_company_info(&app->yf.client, ticker, &series);
+    }
 
     pthread_mutex_lock(&app->fetch.mutex);
     app->fetch.result_status = status;
@@ -228,8 +232,21 @@ void app_poll_stock_fetch(AppState *app) {
         return;
     }
 
-    const char *company_name = series.symbol ? series.symbol : ticker;
-    chart_state_set_company_info(&app->chart, company_name, series.exchange_name, series.currency, NULL, NULL, NULL);
+    const char *company_name = ticker;
+    if (series.long_name && series.long_name[0] != '\0') {
+        company_name = series.long_name;
+    } else if (series.short_name && series.short_name[0] != '\0') {
+        company_name = series.short_name;
+    } else if (series.symbol && series.symbol[0] != '\0') {
+        company_name = series.symbol;
+    }
+    chart_state_set_company_info(&app->chart,
+                                 company_name,
+                                 series.exchange_name,
+                                 series.currency,
+                                 series.sector,
+                                 series.industry,
+                                 NULL);
 
     pthread_mutex_lock(&app->fetch.mutex);
     app->fetch.ui_state = FetchUiSuccess;
