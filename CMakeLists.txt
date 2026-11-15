@@ -111,23 +111,17 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(cimgui_lib PUBLIC dl pthread m)
 endif()
 
-add_library(alphavantage STATIC
-  src/alphavantage/alphavantage.c
-  src/alphavantage/av_time_series_csv.c
-  src/alphavantage/av_time_series_api.c
-  src/alphavantage/av_search.c
-  src/alphavantage/av_market.c
-  src/alphavantage/av_overview.c
-  src/alphavantage/av_logo.c
-  src/alphavantage/av_utils.c
+add_library(yfinance STATIC
+  src/yfinance/yfinance.c
+  src/yfinance/yf_chart.c
 )
 
-target_include_directories(alphavantage PUBLIC
+target_include_directories(yfinance PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${JSONC_INCLUDE_DIRS}
 )
 
-target_link_libraries(alphavantage PUBLIC
+target_link_libraries(yfinance PUBLIC
   CURL::libcurl
   ${JSONC_LIBRARIES}
 )
@@ -147,7 +141,7 @@ target_include_directories(market-analyzer PRIVATE
 
 target_link_libraries(market-analyzer PRIVATE
   cimgui_lib
-  alphavantage
+  yfinance
 )
 
 if(MSVC)

@@ -123,7 +123,9 @@ void stock_data_render(AppState *app) {
                 igTextUnformatted("Current price: N/A", NULL);
             }
 
-            igText("Ticker: %s", chart->ticker[0] != '\0' ? chart->ticker : "N/A");
+            igSetWindowFontScale(1.6f);
+            igText("%s", chart->ticker[0] != '\0' ? chart->ticker : "N/A");
+            igSetWindowFontScale(1.0f);
             if (chart->exchange[0] != '\0') {
                 igText("Exchange: %s", chart->exchange);
             }

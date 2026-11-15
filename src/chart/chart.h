@@ -1,7 +1,7 @@
 #ifndef CHART_H
 #define CHART_H
 
-#include "alphavantage/av_types.h"
+#include "yfinance/yf_types.h"
 
 #include <stdbool.h>
 
@@ -33,11 +33,11 @@ void chart_state_init(ChartState *chart);
 // Safe to call on an empty or already-cleared state. Returns nothing.
 void chart_state_clear(ChartState *chart);
 
-// Replaces chart contents with OHLC data copied from a parsed time series.
-// Series points are expected in Alpha Vantage order (most recent first) and are
-// stored chronologically. On failure, leaves the chart cleared.
+// Replaces chart contents with OHLC data copied from a parsed Yahoo Finance time series.
+// Series points are expected in chronological order (oldest to newest).
+// On failure, leaves the chart cleared.
 // Returns true on success, or false on invalid input or allocation failure.
-bool chart_state_set_from_time_series(ChartState *chart, const char *ticker, const AVTimeSeries *series);
+bool chart_state_set_from_yf_time_series(ChartState *chart, const char *ticker, const YFTimeSeries *series);
 
 // Sets company display information on the chart state.
 // Any NULL string argument leaves the corresponding field unchanged/cleared appropriately.

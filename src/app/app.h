@@ -3,21 +3,21 @@
 
 #include <stdbool.h>
 
-#include "alphavantage/alphavantage.h"
 #include "chart/chart.h"
+#include "yfinance/yfinance.h"
 
 typedef struct GLFWwindow GLFWwindow;
 
-// Holds shared Alpha Vantage client state owned by the application.
+// Holds shared Yahoo Finance client state owned by the application.
 typedef struct {
-    AVClient client;
+    YFClient client;
     bool ready;
-} AVState;
+} YFState;
 
 // Holds top-level application state shared across windows and modules.
 typedef struct {
     GLFWwindow *window;
-    AVState av;
+    YFState yf;
     ChartState chart;
 } AppState;
 

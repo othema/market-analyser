@@ -20,30 +20,26 @@ static void glfw_error_callback(int error, const char *description) {
     fprintf(stderr, "GLFW error: %s\n", description ? description : "(unknown)");
 }
 
-// Initializes shared Alpha Vantage global/client state for the application.
+// Initializes shared Yahoo Finance global/client state for the application.
 // Returns true on success, or false on initialization failure.
-static bool app_init_av(AppState *app) {
+static bool app_init_yf(AppState *app) {
     if (!app) {
         return false;
     }
 
-    app->av.ready = false;
-    if (av_global_init() != AVOk) {
-        fprintf(stderr, "Failed to initialize Alpha Vantage globals\n");
+    app->yf.ready = false;
+    if (yf_global_init() != YFOk) {
+        fprintf(stderr, "Failed to initialize Yahoo Finance globals\n");
         return false;
     }
 
-    const char *api_key = getenv("ALPHAVANTAGE_API_KEY");
-    if (av_client_init(&app->av.client, api_key) != AVOk) {
-        fprintf(stderr, "Failed to initialize Alpha Vantage client\n");
-        av_global_cleanup();
+    if (yf_client_init(&app->yf.client) != YFOk) {
+        fprintf(stderr, "Failed to initialize Yahoo Finance client\n");
+        yf_global_cleanup();
         return false;
     }
-    if (!api_key || api_key[0] == '\0') {
-        fprintf(stderr, "Warning: ALPHAVANTAGE_API_KEY is not set; API requests will fail\n");
-    }
 
-    app->av.ready = true;
+    app->yf.ready = true;
     return true;
 }
 
@@ -105,13 +101,13 @@ bool app_init(AppState *app) {
     app->window = NULL;
     chart_state_init(&app->chart);
 
-    if (!app_init_av(app)) {
+    if (!app_init_yf(app)) {
         return false;
     }
     if (!app_init_window(app)) {
-        av_client_cleanup(&app->av.client);
-        av_global_cleanup();
-        app->av.ready = false;
+        yf_client_cleanup(&app->yf.client);
+        yf_global_cleanup();
+        app->yf.ready = false;
         return false;
     }
 
@@ -212,10 +208,10 @@ void app_shutdown(AppState *app) {
         glfwTerminate();
     }
 
-    if (app->av.ready) {
-        av_client_cleanup(&app->av.client);
-        av_global_cleanup();
-        app->av.ready = false;
+    if (app->yf.ready) {
+        yf_client_cleanup(&app->yf.client);
+        yf_global_cleanup();
+        app->yf.ready = false;
     }
 
     chart_state_clear(&app->chart);

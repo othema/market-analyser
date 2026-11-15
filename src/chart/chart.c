@@ -63,11 +63,11 @@ static void chart_state_set_ticker(ChartState *chart, const char *ticker) {
     chart_copy_string(chart->ticker, sizeof(chart->ticker), ticker);
 }
 
-// Replaces chart contents with OHLC data copied from a parsed time series.
-// Series points are expected in Alpha Vantage order (most recent first) and are
-// stored chronologically. On failure, leaves the chart cleared.
+// Replaces chart contents with OHLC data copied from a parsed Yahoo Finance time series.
+// Series points are expected in chronological order (oldest to newest).
+// On failure, leaves the chart cleared.
 // Returns true on success, or false on invalid input or allocation failure.
-bool chart_state_set_from_time_series(ChartState *chart, const char *ticker, const AVTimeSeries *series) {
+bool chart_state_set_from_yf_time_series(ChartState *chart, const char *ticker, const YFTimeSeries *series) {
     if (!chart) {
         return false;
     }
@@ -94,10 +94,9 @@ bool chart_state_set_from_time_series(ChartState *chart, const char *ticker, con
         return false;
     }
 
-    // API returns most recent first; reverse to chronological for plotting.
+    // Yahoo Finance series points are already in chronological order.
     for (size_t i = 0; i < count; i++) {
-        size_t src = count - 1 - i;
-        const AVTimeSeriesPoint *point = &series->points[src];
+        const YFTimeSeriesPoint *point = &series->points[i];
         xs[i] = (double)i;
         opens[i] = point->open;
         highs[i] = point->high;
@@ -113,11 +112,9 @@ bool chart_state_set_from_time_series(ChartState *chart, const char *ticker, con
     chart->count = (int)count;
     chart_state_set_ticker(chart, ticker);
 
-    // Most recent point is index 0 in the original API-ordered series.
-    if (series->points[0].close > 0.0 || series->points[0].close < 0.0 || series->points[0].close == 0.0) {
-        chart->latest_price = series->points[0].close;
-        chart->has_latest_price = 1;
-    }
+    // Latest point is the last element in chronological order.
+    chart->latest_price = series->points[count - 1].close;
+    chart->has_latest_price = 1;
 
     return true;
 }
