@@ -40,3 +40,4 @@ CMakeUserPresets.json
 imgui.ini
 
 .env
+STOCKS.txt
