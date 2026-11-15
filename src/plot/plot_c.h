@@ -13,6 +13,20 @@ typedef struct PlotVec2 {
     float y;
 } PlotVec2;
 
+// Double-precision point used for plot-space coordinates.
+typedef struct PlotPointD {
+    double x;
+    double y;
+} PlotPointD;
+
+// Double-precision rectangle used for plot-space limits.
+typedef struct PlotRectD {
+    double x_min;
+    double x_max;
+    double y_min;
+    double y_max;
+} PlotRectD;
+
 // Creates the global ImPlot context.
 // Must be called after the ImGui context is created. Returns nothing.
 void plot_create_context(void);
@@ -58,6 +72,25 @@ void *plot_get_draw_list(void);
 // Converts plot-space coordinates (x, y) to pixel-space coordinates for X1/Y1 axes.
 // Returns the pixel position as a PlotVec2.
 PlotVec2 plot_to_pixels(double x, double y);
+
+// Plots a line series using X1/Y1 axes.
+// flags can be 0 for default styling. Returns nothing.
+void plot_plot_line(const char *label_id, const double *xs, const double *ys, int count, int flags);
+
+// Sets the color/style for the next plotted line item.
+// Returns nothing.
+void plot_set_next_line_style(float r, float g, float b, float a, float weight);
+
+// Returns true if the current plot area is hovered.
+bool plot_is_hovered(void);
+
+// Returns the mouse position in plot coordinates for the given axes.
+// axis constants: 0 = X1, 3 = Y1 (ImAxis values), use -1 for IMPLOT_AUTO.
+PlotPointD plot_get_mouse_pos(int x_axis, int y_axis);
+
+// Returns the current plot limits for the given axes.
+// axis constants: 0 = X1, 3 = Y1 (ImAxis values), use -1 for IMPLOT_AUTO.
+PlotRectD plot_get_plot_limits(int x_axis, int y_axis);
 
 #ifdef __cplusplus
 }

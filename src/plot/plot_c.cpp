@@ -70,3 +70,39 @@ PlotVec2 plot_to_pixels(double x, double y) {
     PlotVec2 result = {pixel.x, pixel.y};
     return result;
 }
+
+// Plots a line series using X1/Y1 axes.
+// flags can be 0 for default styling. Returns nothing.
+void plot_plot_line(const char *label_id, const double *xs, const double *ys, int count, int flags) {
+    if (!xs || !ys || count <= 0) {
+        return;
+    }
+    ImPlot::PlotLine(label_id ? label_id : "", xs, ys, count, (ImPlotLineFlags)flags, 0, sizeof(double));
+}
+
+// Sets the color/style for the next plotted line item.
+// Returns nothing.
+void plot_set_next_line_style(float r, float g, float b, float a, float weight) {
+    ImPlot::SetNextLineStyle(ImVec4(r, g, b, a), weight);
+}
+
+// Returns true if the current plot area is hovered.
+bool plot_is_hovered(void) {
+    return ImPlot::IsPlotHovered();
+}
+
+// Returns the mouse position in plot coordinates for the given axes.
+// axis constants: 0 = X1, 3 = Y1 (ImAxis values), use -1 for IMPLOT_AUTO.
+PlotPointD plot_get_mouse_pos(int x_axis, int y_axis) {
+    ImPlotPoint p = ImPlot::GetPlotMousePos((ImAxis)x_axis, (ImAxis)y_axis);
+    PlotPointD out = {p.x, p.y};
+    return out;
+}
+
+// Returns the current plot limits for the given axes.
+// axis constants: 0 = X1, 3 = Y1 (ImAxis values), use -1 for IMPLOT_AUTO.
+PlotRectD plot_get_plot_limits(int x_axis, int y_axis) {
+    ImPlotRect r = ImPlot::GetPlotLimits((ImAxis)x_axis, (ImAxis)y_axis);
+    PlotRectD out = {r.X.Min, r.X.Max, r.Y.Min, r.Y.Max};
+    return out;
+}

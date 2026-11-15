@@ -37,6 +37,7 @@ void chart_state_init(ChartState *chart) {
     chart->highs = NULL;
     chart->lows = NULL;
     chart->closes = NULL;
+    chart->volumes = NULL;
     chart->count = 0;
 }
 
@@ -51,6 +52,7 @@ void chart_state_clear(ChartState *chart) {
     free(chart->highs);
     free(chart->lows);
     free(chart->closes);
+    free(chart->volumes);
     chart_state_init(chart);
 }
 
@@ -85,12 +87,14 @@ bool chart_state_set_from_yf_time_series(ChartState *chart, const char *ticker, 
     double *highs = (double *)malloc(count * sizeof(double));
     double *lows = (double *)malloc(count * sizeof(double));
     double *closes = (double *)malloc(count * sizeof(double));
-    if (!xs || !opens || !highs || !lows || !closes) {
+    long long *volumes = (long long *)malloc(count * sizeof(long long));
+    if (!xs || !opens || !highs || !lows || !closes || !volumes) {
         free(xs);
         free(opens);
         free(highs);
         free(lows);
         free(closes);
+        free(volumes);
         return false;
     }
 
@@ -102,6 +106,7 @@ bool chart_state_set_from_yf_time_series(ChartState *chart, const char *ticker, 
         highs[i] = point->high;
         lows[i] = point->low;
         closes[i] = point->close;
+        volumes[i] = point->volume;
     }
 
     chart->xs = xs;
@@ -109,6 +114,7 @@ bool chart_state_set_from_yf_time_series(ChartState *chart, const char *ticker, 
     chart->highs = highs;
     chart->lows = lows;
     chart->closes = closes;
+    chart->volumes = volumes;
     chart->count = (int)count;
     chart_state_set_ticker(chart, ticker);
 
@@ -145,5 +151,5 @@ bool chart_state_has_data(const ChartState *chart) {
     if (!chart) {
         return false;
     }
-    return chart->count > 0 && chart->xs && chart->opens && chart->highs && chart->lows && chart->closes;
+    return chart->count > 0 && chart->xs && chart->opens && chart->highs && chart->lows && chart->closes && chart->volumes;
 }

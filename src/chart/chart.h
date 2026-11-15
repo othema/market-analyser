@@ -22,6 +22,7 @@ typedef struct {
     double *highs;
     double *lows;
     double *closes;
+    long long *volumes;
     int count;
 } ChartState;
 

@@ -8,6 +8,7 @@
 
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 
 // Computes vertical axis bounds for chart data and writes them to output pointers.
@@ -89,10 +90,15 @@ static void draw_candlesticks(const ChartState *chart) {
     }
 }
 
-// Renders company details and the candlestick chart for the current chart state.
+// Renders company details and the chart for the current chart state.
 // Intended to be called inside an existing ImGui window/child region.
 // Returns nothing.
 void stock_data_render(AppState *app) {
+    static int chart_type_index = 0; // 0 = Candlesticks, 1 = Line
+    static int running_avg_index = 0; // 0=Disabled, 1=10, 2=20, 3=50
+    const char *chart_type_options[] = {"Candlesticks", "Line"};
+    const char *running_avg_options[] = {"Disabled", "10", "20", "50"};
+    const int running_avg_period_values[] = {0, 10, 20, 50};
     bool loading = false;
     char loading_text[256] = {0};
     if (app) {
@@ -120,20 +126,8 @@ void stock_data_render(AppState *app) {
     const ChartState *chart = &app->chart;
     const char *display_name = chart->company_name[0] != '\0' ? chart->company_name : chart->ticker;
 
-    // Company header: logo area on the left, details on the right.
+    // Company header details.
     if (igBeginChild_Str("CompanyHeader", (ImVec2){0.0f, 110.0f}, false, 0)) {
-        if (igBeginChild_Str("CompanyLogo", (ImVec2){100.0f, 0.0f}, true, 0)) {
-            if (chart->logo_url[0] != '\0') {
-                igTextWrapped("%s", chart->logo_url);
-            } else {
-                igTextDisabled("Logo");
-                igTextDisabled("N/A");
-            }
-        }
-        igEndChild();
-
-        igSameLine(0.0f, 8.0f);
-
         if (igBeginChild_Str("CompanyDetails", (ImVec2){0.0f, 0.0f}, false, 0)) {
             igTextUnformatted(display_name, NULL);
             if (chart->has_latest_price) {
@@ -163,6 +157,16 @@ void stock_data_render(AppState *app) {
     igEndChild();
 
     igSeparator();
+
+    igTextUnformatted("Chart type:", NULL);
+    igSameLine(0.0f, 8.0f);
+    igSetNextItemWidth(160.0f);
+    igCombo_Str_arr("##ChartType", &chart_type_index, chart_type_options, 2, 2);
+    igSameLine(0.0f, 16.0f);
+    igTextUnformatted("Running average:", NULL);
+    igSameLine(0.0f, 8.0f);
+    igSetNextItemWidth(100.0f);
+    igCombo_Str_arr("##RunningAvg", &running_avg_index, running_avg_options, 4, 4);
 
     const char *label = (chart->ticker[0] != '\0') ? chart->ticker : "OHLC";
     PlotVec2 size = {-1.0f, -1.0f};
@@ -234,7 +238,101 @@ void stock_data_render(AppState *app) {
         }
         // Use ImPlotCond_Always (1) so limits update when new data is loaded.
         plot_setup_axes_limits(x_min - x_pad, x_max + x_pad, y_min - padding, y_max + padding, 1);
-        draw_candlesticks(chart);
+        if (chart_type_index == 1) {
+            plot_plot_line("Close", chart->xs, chart->closes, chart->count, 0);
+        } else {
+            draw_candlesticks(chart);
+        }
+
+        int running_avg_period = running_avg_period_values[running_avg_index];
+        if (running_avg_period > 0 && chart->count > 0) {
+            double *avg = (double *)malloc((size_t)chart->count * sizeof(double));
+            if (avg) {
+                double window_sum = 0.0;
+                for (int i = 0; i < chart->count; i++) {
+                    window_sum += chart->closes[i];
+                    if (i >= running_avg_period) {
+                        window_sum -= chart->closes[i - running_avg_period];
+                    }
+                    int denom = (i + 1 < running_avg_period) ? (i + 1) : running_avg_period;
+                    avg[i] = window_sum / (double)denom;
+                }
+                char avg_label[32];
+                snprintf(avg_label, sizeof(avg_label), "SMA %d", running_avg_period);
+                // Use a consistent color for running average line.
+                plot_set_next_line_style(1.00f, 0.70f, 0.20f, 1.00f, 2.0f);
+                plot_plot_line(avg_label, chart->xs, avg, chart->count, 0);
+                free(avg);
+            }
+        }
+
+        // Interactive hover: vertical crosshair + tooltip for nearest point.
+        if (plot_is_hovered() && chart->count > 0) {
+            PlotPointD mouse = plot_get_mouse_pos(0, 3); // ImAxis_X1, ImAxis_Y1
+            int nearest = 0;
+            double best_dist = mouse.x - chart->xs[0];
+            if (best_dist < 0.0) best_dist = -best_dist;
+            for (int i = 1; i < chart->count; i++) {
+                double d = mouse.x - chart->xs[i];
+                if (d < 0.0) d = -d;
+                if (d < best_dist) {
+                    best_dist = d;
+                    nearest = i;
+                }
+            }
+
+            PlotRectD limits = plot_get_plot_limits(0, 3);
+            ImDrawList *draw_list = (ImDrawList *)plot_get_draw_list();
+            if (draw_list) {
+                double x = chart->xs[nearest];
+                PlotVec2 top = plot_to_pixels(x, limits.y_max);
+                PlotVec2 bot = plot_to_pixels(x, limits.y_min);
+                ImU32 cross_color = igGetColorU32_Vec4((ImVec4){0.80f, 0.80f, 0.80f, 0.45f});
+                ImDrawList_AddLine(draw_list, (ImVec2){top.x, top.y}, (ImVec2){bot.x, bot.y}, cross_color, 1.0f);
+            }
+
+            // Format date label for tooltip.
+            char date_label[32] = "?";
+            time_t ts = (time_t)chart->xs[nearest];
+            struct tm tm_buf;
+            struct tm *tm_info = gmtime(&ts);
+            if (tm_info) {
+                tm_buf = *tm_info;
+                snprintf(date_label, sizeof(date_label), "%02d/%02d/%04d",
+                         tm_buf.tm_mday, tm_buf.tm_mon + 1, tm_buf.tm_year + 1900);
+            }
+
+            double open = chart->opens[nearest];
+            double high = chart->highs[nearest];
+            double low = chart->lows[nearest];
+            double close = chart->closes[nearest];
+            long long volume = chart->volumes ? chart->volumes[nearest] : 0;
+            double change = 0.0;
+            double change_pct = 0.0;
+            if (nearest > 0) {
+                double prev_close = chart->closes[nearest - 1];
+                change = close - prev_close;
+                if (prev_close != 0.0) {
+                    change_pct = (change / prev_close) * 100.0;
+                }
+            }
+
+            igBeginTooltip();
+            igText("%s", date_label);
+            igSeparator();
+            igText("Open:   %.2f", open);
+            igText("High:   %.2f", high);
+            igText("Low:    %.2f", low);
+            igText("Close:  %.2f", close);
+            igText("Volume: %lld", volume);
+            if (nearest > 0) {
+                igText("Change: %+.2f (%+.2f%%)", change, change_pct);
+            } else {
+                igTextUnformatted("Change: N/A", NULL);
+            }
+            igEndTooltip();
+        }
+
         plot_end();
     }
 }
