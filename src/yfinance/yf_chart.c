@@ -1,4 +1,5 @@
 #include "yf_chart.h"
+#include "yf_http.h"
 
 #include <curl/curl.h>
 #include <json-c/json.h>
@@ -378,28 +379,6 @@ YFStatus yf_get_time_series(YFClient *client,
     return status;
 }
 
-// Internal buffer/callback helpers for company info enrichment requests.
-typedef struct {
-    char *data;
-    size_t size;
-} YFInfoBuffer;
-
-static size_t yf_info_write_callback(char *ptr, size_t size, size_t count, void *userdata) {
-    size_t total = size * count;
-    YFInfoBuffer *buffer = (YFInfoBuffer *)userdata;
-
-    char *next = (char *)realloc(buffer->data, buffer->size + total + 1);
-    if (!next) {
-        return 0;
-    }
-
-    buffer->data = next;
-    memcpy(buffer->data + buffer->size, ptr, total);
-    buffer->size += total;
-    buffer->data[buffer->size] = '\0';
-    return total;
-}
-
 // Sets a heap-allocated string field if replacement is non-NULL/non-empty.
 // Returns nothing.
 static void yf_set_string_field_if_present(char **field, const char *value) {
@@ -416,124 +395,83 @@ static void yf_set_string_field_if_present(char **field, const char *value) {
 
 
 
-// Fetches and applies additional company information (name, sector, industry, exchange)
-// from Yahoo Finance search results into an existing series.
-// Best-effort: returns YFOk even if enrichment data is unavailable, but fills fields when found.
-// Returns a YFErr* status on transport/invalid-arg failures.
+// Adds company metadata from Yahoo Finance search results to an existing series.
 YFStatus yf_enrich_company_info(YFClient *client, const char *symbol, YFTimeSeries *series) {
     if (!client || !symbol || !series) {
         return YFErrInvalidArg;
     }
 
-    CURL *curl = curl_easy_init();
-    if (!curl) {
-        return YFErrCurlInit;
-    }
-
-    YFStatus status = YFOk;
-    YFInfoBuffer buffer = {0};
-    char *url = NULL;
-    struct json_object *root = NULL;
-
-    char *encoded_symbol = curl_easy_escape(curl, symbol, 0);
-    if (!encoded_symbol) {
-        status = YFErrNomem;
-        goto cleanup;
-    }
-
     const char *base = "https://query1.finance.yahoo.com/v1/finance/search?q=";
     const char *suffix = "&quotesCount=1&newsCount=0";
-    size_t url_size = strlen(base) + strlen(encoded_symbol) + strlen(suffix) + 1;
-    url = (char *)malloc(url_size);
-    if (!url) {
-        curl_free(encoded_symbol);
-        status = YFErrNomem;
-        goto cleanup;
+
+    char *encoded_symbol = yf_url_encode(symbol);
+    if (!encoded_symbol) {
+        return YFErrNomem;
     }
-    strcpy(url, base);
-    strcat(url, encoded_symbol);
-    strcat(url, suffix);
+    char *url = yf_url_concat(base, encoded_symbol, suffix);
     curl_free(encoded_symbol);
-
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, yf_info_write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, client->user_agent ? client->user_agent : "Mozilla/5.0");
-    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
-
-    {
-        CURLcode curl_result = curl_easy_perform(curl);
-        if (curl_result != CURLE_OK) {
-            status = YFErrCurl;
-            goto cleanup;
-        }
+    if (!url) {
+        return YFErrNomem;
     }
 
-    {
-        long http_code = 0;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-        if (http_code != 200 || !buffer.data) {
-            status = YFErrCurl;
-            goto cleanup;
-        }
+    YFResponse response = {0};
+    YFStatus status = yf_http_get(client, url, 15L, &response);
+    free(url);
+    if (status != YFOk) {
+        yf_response_free(&response);
+        return status;
+    }
+    if (response.http_code != 200 || !response.data) {
+        yf_response_free(&response);
+        return YFErrCurl;
     }
 
-    root = json_tokener_parse(buffer.data);
+    struct json_object *root = json_tokener_parse(response.data);
     if (!root || !json_object_is_type(root, json_type_object)) {
-        status = YFErrParse;
-        goto cleanup;
+        if (root) {
+            json_object_put(root);
+        }
+        yf_response_free(&response);
+        return YFErrParse;
     }
 
-    {
-        struct json_object *quotes = NULL;
-        if (json_object_object_get_ex(root, "quotes", &quotes) &&
-            quotes && json_object_is_type(quotes, json_type_array) &&
-            json_object_array_length(quotes) > 0) {
-            struct json_object *quote = json_object_array_get_idx(quotes, 0);
-            if (quote && json_object_is_type(quote, json_type_object)) {
-                struct json_object *value = NULL;
+    struct json_object *quotes = NULL;
+    if (json_object_object_get_ex(root, "quotes", &quotes) &&
+        quotes && json_object_is_type(quotes, json_type_array) &&
+        json_object_array_length(quotes) > 0) {
+        struct json_object *quote = json_object_array_get_idx(quotes, 0);
+        if (quote && json_object_is_type(quote, json_type_object)) {
+            struct json_object *value = NULL;
 
-                if (json_object_object_get_ex(quote, "symbol", &value) && json_object_is_type(value, json_type_string)) {
-                    yf_set_string_field_if_present(&series->symbol, json_object_get_string(value));
-                }
-                if (json_object_object_get_ex(quote, "longname", &value) && json_object_is_type(value, json_type_string)) {
-                    yf_set_string_field_if_present(&series->long_name, json_object_get_string(value));
-                }
-                if (json_object_object_get_ex(quote, "shortname", &value) && json_object_is_type(value, json_type_string)) {
-                    yf_set_string_field_if_present(&series->short_name, json_object_get_string(value));
-                }
-                if (json_object_object_get_ex(quote, "sector", &value) && json_object_is_type(value, json_type_string)) {
-                    yf_set_string_field_if_present(&series->sector, json_object_get_string(value));
-                }
-                if (json_object_object_get_ex(quote, "industry", &value) && json_object_is_type(value, json_type_string)) {
-                    yf_set_string_field_if_present(&series->industry, json_object_get_string(value));
-                }
-                if (json_object_object_get_ex(quote, "exchDisp", &value) && json_object_is_type(value, json_type_string)) {
-                    yf_set_string_field_if_present(&series->exchange_name, json_object_get_string(value));
-                } else if (json_object_object_get_ex(quote, "exchange", &value) && json_object_is_type(value, json_type_string)) {
-                    yf_set_string_field_if_present(&series->exchange_name, json_object_get_string(value));
-                }
+            if (json_object_object_get_ex(quote, "symbol", &value) && json_object_is_type(value, json_type_string)) {
+                yf_set_string_field_if_present(&series->symbol, json_object_get_string(value));
+            }
+            if (json_object_object_get_ex(quote, "longname", &value) && json_object_is_type(value, json_type_string)) {
+                yf_set_string_field_if_present(&series->long_name, json_object_get_string(value));
+            }
+            if (json_object_object_get_ex(quote, "shortname", &value) && json_object_is_type(value, json_type_string)) {
+                yf_set_string_field_if_present(&series->short_name, json_object_get_string(value));
+            }
+            if (json_object_object_get_ex(quote, "sector", &value) && json_object_is_type(value, json_type_string)) {
+                yf_set_string_field_if_present(&series->sector, json_object_get_string(value));
+            }
+            if (json_object_object_get_ex(quote, "industry", &value) && json_object_is_type(value, json_type_string)) {
+                yf_set_string_field_if_present(&series->industry, json_object_get_string(value));
+            }
+            if (json_object_object_get_ex(quote, "exchDisp", &value) && json_object_is_type(value, json_type_string)) {
+                yf_set_string_field_if_present(&series->exchange_name, json_object_get_string(value));
+            } else if (json_object_object_get_ex(quote, "exchange", &value) && json_object_is_type(value, json_type_string)) {
+                yf_set_string_field_if_present(&series->exchange_name, json_object_get_string(value));
             }
         }
     }
 
-    status = YFOk;
-
-cleanup:
-    if (root) {
-        json_object_put(root);
-    }
-    free(buffer.data);
-    free(url);
-    curl_easy_cleanup(curl);
-    return status;
+    json_object_put(root);
+    yf_response_free(&response);
+    return YFOk;
 }
 
 // Searches Yahoo Finance symbols matching a query string.
-// On success, allocates *out_results (array of count items) which must be freed with yf_search_results_free.
-// Returns YFOk on success, or a YFErr* status on failure.
 YFStatus yf_search_symbols(YFClient *client, const char *query, YFSearchResult **out_results, size_t *out_count, size_t max_results) {
     if (!client || !query || !out_results || !out_count) {
         return YFErrInvalidArg;
@@ -544,124 +482,102 @@ YFStatus yf_search_symbols(YFClient *client, const char *query, YFSearchResult *
         return YFOk;
     }
 
-    CURL *curl = curl_easy_init();
-    if (!curl) {
-        return YFErrCurlInit;
-    }
-
-    YFStatus status = YFOk;
-    YFInfoBuffer buffer = {0};
-    char *url = NULL;
-    struct json_object *root = NULL;
-    YFSearchResult *results = NULL;
-    size_t results_cap = 0;
-
-    char *encoded_query = curl_easy_escape(curl, query, 0);
-    if (!encoded_query) {
-        status = YFErrNomem;
-        goto cleanup;
-    }
-
     char suffix[64];
-    snprintf(suffix, sizeof(suffix), "&quotesCount=%zu&newsCount=0", max_results);
+    int written = snprintf(suffix, sizeof(suffix), "&quotesCount=%zu&newsCount=0", max_results);
+    if (written < 0 || (size_t)written >= sizeof(suffix)) {
+        return YFErrNomem;
+    }
+
     const char *base = "https://query1.finance.yahoo.com/v1/finance/search?q=";
-    size_t url_size = strlen(base) + strlen(encoded_query) + strlen(suffix) + 1;
-    url = (char *)malloc(url_size);
-    if (!url) {
-        curl_free(encoded_query);
-        status = YFErrNomem;
-        goto cleanup;
+    char *encoded_query = yf_url_encode(query);
+    if (!encoded_query) {
+        return YFErrNomem;
     }
-    strcpy(url, base);
-    strcat(url, encoded_query);
-    strcat(url, suffix);
+    char *url = yf_url_concat(base, encoded_query, suffix);
     curl_free(encoded_query);
-
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, yf_info_write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, client->user_agent ? client->user_agent : "Mozilla/5.0");
-    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
-
-    if (curl_easy_perform(curl) != CURLE_OK) {
-        status = YFErrCurl;
-        goto cleanup;
-    }
-    {
-        long http_code = 0;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-        if (http_code != 200 || !buffer.data) {
-            status = YFErrCurl;
-            goto cleanup;
-        }
+    if (!url) {
+        return YFErrNomem;
     }
 
-    root = json_tokener_parse(buffer.data);
-    if (!root || !json_object_is_type(root, json_type_object)) {
-        status = YFErrParse;
-        goto cleanup;
-    }
-
-    {
-        struct json_object *quotes = NULL;
-        if (json_object_object_get_ex(root, "quotes", &quotes) &&
-            quotes && json_object_is_type(quotes, json_type_array)) {
-            size_t n = (size_t)json_object_array_length(quotes);
-            if (n > max_results) n = max_results;
-            results = (YFSearchResult *)calloc(n, sizeof(YFSearchResult));
-            if (!results) {
-                status = YFErrNomem;
-                goto cleanup;
-            }
-            results_cap = n;
-            for (size_t i = 0; i < n; i++) {
-                struct json_object *quote = json_object_array_get_idx(quotes, (int)i);
-                if (!quote || !json_object_is_type(quote, json_type_object)) {
-                    continue;
-                }
-                struct json_object *value = NULL;
-                YFSearchResult *item = &results[*out_count];
-                if (json_object_object_get_ex(quote, "symbol", &value) && json_object_is_type(value, json_type_string)) {
-                    item->symbol = yf_strdup_safe(json_object_get_string(value));
-                }
-                if (json_object_object_get_ex(quote, "shortname", &value) && json_object_is_type(value, json_type_string)) {
-                    item->short_name = yf_strdup_safe(json_object_get_string(value));
-                }
-                if (json_object_object_get_ex(quote, "longname", &value) && json_object_is_type(value, json_type_string)) {
-                    item->long_name = yf_strdup_safe(json_object_get_string(value));
-                }
-                if (json_object_object_get_ex(quote, "exchDisp", &value) && json_object_is_type(value, json_type_string)) {
-                    item->exchange = yf_strdup_safe(json_object_get_string(value));
-                } else if (json_object_object_get_ex(quote, "exchange", &value) && json_object_is_type(value, json_type_string)) {
-                    item->exchange = yf_strdup_safe(json_object_get_string(value));
-                }
-                if (json_object_object_get_ex(quote, "quoteType", &value) && json_object_is_type(value, json_type_string)) {
-                    item->quote_type = yf_strdup_safe(json_object_get_string(value));
-                }
-                if (item->symbol && item->symbol[0] != '\0') {
-                    (*out_count)++;
-                } else {
-                    free(item->symbol); item->symbol = NULL;
-                    free(item->short_name); item->short_name = NULL;
-                    free(item->long_name); item->long_name = NULL;
-                    free(item->exchange); item->exchange = NULL;
-                    free(item->quote_type); item->quote_type = NULL;
-                }
-            }
-        }
-    }
-
-    *out_results = results;
-    results = NULL;
-    status = YFOk;
-
-cleanup:
-    if (root) json_object_put(root);
-    if (results) yf_search_results_free(results, results_cap);
-    free(buffer.data);
+    YFResponse response = {0};
+    YFStatus status = yf_http_get(client, url, 10L, &response);
     free(url);
-    curl_easy_cleanup(curl);
-    return status;
+    if (status != YFOk) {
+        yf_response_free(&response);
+        return status;
+    }
+    if (response.http_code != 200 || !response.data) {
+        yf_response_free(&response);
+        return YFErrCurl;
+    }
+
+    struct json_object *root = json_tokener_parse(response.data);
+    if (!root || !json_object_is_type(root, json_type_object)) {
+        if (root) {
+            json_object_put(root);
+        }
+        yf_response_free(&response);
+        return YFErrParse;
+    }
+
+    YFSearchResult *results = NULL;
+
+    struct json_object *quotes = NULL;
+    if (json_object_object_get_ex(root, "quotes", &quotes) &&
+        quotes && json_object_is_type(quotes, json_type_array)) {
+        size_t n = (size_t)json_object_array_length(quotes);
+        if (n > max_results) {
+            n = max_results;
+        }
+        results = (YFSearchResult *)calloc(n, sizeof(YFSearchResult));
+        if (!results) {
+            json_object_put(root);
+            yf_response_free(&response);
+            return YFErrNomem;
+        }
+        for (size_t i = 0; i < n; i++) {
+            struct json_object *quote = json_object_array_get_idx(quotes, (int)i);
+            if (!quote || !json_object_is_type(quote, json_type_object)) {
+                continue;
+            }
+            struct json_object *value = NULL;
+            YFSearchResult *item = &results[*out_count];
+            if (json_object_object_get_ex(quote, "symbol", &value) && json_object_is_type(value, json_type_string)) {
+                item->symbol = yf_strdup_safe(json_object_get_string(value));
+            }
+            if (json_object_object_get_ex(quote, "shortname", &value) && json_object_is_type(value, json_type_string)) {
+                item->short_name = yf_strdup_safe(json_object_get_string(value));
+            }
+            if (json_object_object_get_ex(quote, "longname", &value) && json_object_is_type(value, json_type_string)) {
+                item->long_name = yf_strdup_safe(json_object_get_string(value));
+            }
+            if (json_object_object_get_ex(quote, "exchDisp", &value) && json_object_is_type(value, json_type_string)) {
+                item->exchange = yf_strdup_safe(json_object_get_string(value));
+            } else if (json_object_object_get_ex(quote, "exchange", &value) && json_object_is_type(value, json_type_string)) {
+                item->exchange = yf_strdup_safe(json_object_get_string(value));
+            }
+            if (json_object_object_get_ex(quote, "quoteType", &value) && json_object_is_type(value, json_type_string)) {
+                item->quote_type = yf_strdup_safe(json_object_get_string(value));
+            }
+            if (item->symbol && item->symbol[0] != '\0') {
+                (*out_count)++;
+            } else {
+                free(item->symbol);
+                item->symbol = NULL;
+                free(item->short_name);
+                item->short_name = NULL;
+                free(item->long_name);
+                item->long_name = NULL;
+                free(item->exchange);
+                item->exchange = NULL;
+                free(item->quote_type);
+                item->quote_type = NULL;
+            }
+        }
+    }
+
+    json_object_put(root);
+    yf_response_free(&response);
+    *out_results = results;
+    return YFOk;
 }

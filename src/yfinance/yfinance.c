@@ -1,4 +1,5 @@
 #include "yfinance.h"
+#include "yf_http.h"
 
 #include <curl/curl.h>
 #include <stdlib.h>
@@ -10,29 +11,91 @@ static const char *YF_DEFAULT_BASE_URL = "https://query1.finance.yahoo.com/v8/fi
 // Default user agent sent with Yahoo Finance requests.
 static const char *YF_DEFAULT_USER_AGENT = "Mozilla/5.0";
 
-// Dynamic byte buffer used to accumulate HTTP response data.
-typedef struct {
-    char *data;
-    size_t size;
-} YFBuffer;
-
-// libcurl write callback that appends received bytes to a YFBuffer.
-// Keeps the buffer NUL-terminated and grows it as needed.
-// Returns the number of bytes consumed on success, or 0 on allocation failure.
+// libcurl write callback that appends received bytes to a YFResponse.
 static size_t yf_write_callback(char *ptr, size_t size, size_t count, void *userdata) {
     size_t total = size * count;
-    YFBuffer *buffer = (YFBuffer *)userdata;
+    YFResponse *response = (YFResponse *)userdata;
 
-    char *next = (char *)realloc(buffer->data, buffer->size + total + 1);
+    char *next = (char *)realloc(response->data, response->size + total + 1);
     if (!next) {
         return 0;
     }
 
-    buffer->data = next;
-    memcpy(buffer->data + buffer->size, ptr, total);
-    buffer->size += total;
-    buffer->data[buffer->size] = '\0';
+    response->data = next;
+    memcpy(response->data + response->size, ptr, total);
+    response->size += total;
+    response->data[response->size] = '\0';
     return total;
+}
+
+char *yf_url_encode(const char *value) {
+    if (!value) {
+        return NULL;
+    }
+
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+        return NULL;
+    }
+
+    char *encoded = curl_easy_escape(curl, value, 0);
+    curl_easy_cleanup(curl);
+    return encoded;
+}
+
+char *yf_url_concat(const char *base, const char *query, const char *suffix) {
+    if (!base || !query || !suffix) {
+        return NULL;
+    }
+
+    size_t base_len = strlen(base);
+    size_t query_len = strlen(query);
+    size_t suffix_len = strlen(suffix);
+    char *url = (char *)malloc(base_len + query_len + suffix_len + 1);
+    if (!url) {
+        return NULL;
+    }
+
+    memcpy(url, base, base_len);
+    memcpy(url + base_len, query, query_len);
+    memcpy(url + base_len + query_len, suffix, suffix_len + 1);
+    return url;
+}
+
+YFStatus yf_http_get(const YFClient *client, const char *url,
+                     long timeout_seconds, YFResponse *response) {
+    if (!client || !url || !response) {
+        return YFErrInvalidArg;
+    }
+
+    yf_response_init(response);
+
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+        return YFErrCurlInit;
+    }
+
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, yf_write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT,
+                     client->user_agent ? client->user_agent : YF_DEFAULT_USER_AGENT);
+    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout_seconds);
+
+    CURLcode curl_result = curl_easy_perform(curl);
+    response->curl_code = (int)curl_result;
+    if (curl_result == CURLE_OK) {
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response->http_code);
+    }
+    curl_easy_cleanup(curl);
+
+    if (curl_result != CURLE_OK) {
+        yf_response_free(response);
+        return YFErrCurl;
+    }
+    return YFOk;
 }
 
 // Initializes global libcurl state required by this interface.
@@ -101,55 +164,7 @@ void yf_response_free(YFResponse *response) {
     response->curl_code = 0;
 }
 
-// Builds a Yahoo Finance chart request URL for a symbol, interval, and range.
-// Returns a heap-allocated URL string on success, or NULL on failure.
-// The caller is responsible for freeing the returned string.
-static char *yf_build_chart_url(CURL *curl, const char *base_url, const char *symbol, const char *interval, const char *range) {
-    if (!curl || !base_url || !symbol || !interval || !range) {
-        return NULL;
-    }
-
-    char *encoded_symbol = curl_easy_escape(curl, symbol, 0);
-    char *encoded_interval = curl_easy_escape(curl, interval, 0);
-    char *encoded_range = curl_easy_escape(curl, range, 0);
-    if (!encoded_symbol || !encoded_interval || !encoded_range) {
-        curl_free(encoded_symbol);
-        curl_free(encoded_interval);
-        curl_free(encoded_range);
-        return NULL;
-    }
-
-    const char *prefix = "?interval=";
-    const char *mid = "&range=";
-    size_t url_size = strlen(base_url) + strlen(encoded_symbol) +
-                      strlen(prefix) + strlen(encoded_interval) +
-                      strlen(mid) + strlen(encoded_range) + 1;
-
-    char *url = (char *)malloc(url_size);
-    if (!url) {
-        curl_free(encoded_symbol);
-        curl_free(encoded_interval);
-        curl_free(encoded_range);
-        return NULL;
-    }
-
-    strcpy(url, base_url);
-    strcat(url, encoded_symbol);
-    strcat(url, prefix);
-    strcat(url, encoded_interval);
-    strcat(url, mid);
-    strcat(url, encoded_range);
-
-    curl_free(encoded_symbol);
-    curl_free(encoded_interval);
-    curl_free(encoded_range);
-    return url;
-}
-
 // Fetches raw chart JSON for a symbol from Yahoo Finance.
-// interval examples: "1d", "1wk", "1mo". range examples: "1mo", "6mo", "1y", "5y", "max".
-// On transport success, stores the response body in response.
-// Returns YFOk if the request completed, or a YFErr* status on failure.
 YFStatus yf_fetch_chart(YFClient *client,
                         const char *symbol,
                         const char *interval,
@@ -159,56 +174,35 @@ YFStatus yf_fetch_chart(YFClient *client,
         return YFErrInvalidArg;
     }
 
-    yf_response_init(response);
-
-    CURL *curl = curl_easy_init();
-    if (!curl) {
-        return YFErrCurlInit;
-    }
-
-    YFBuffer buffer = {0};
-    YFStatus status = YFOk;
-    char *url = yf_build_chart_url(curl,
-                                   client->base_url ? client->base_url : YF_DEFAULT_BASE_URL,
-                                   symbol,
-                                   interval,
-                                   range);
-    if (!url) {
-        curl_easy_cleanup(curl);
+    char *encoded_symbol = yf_url_encode(symbol);
+    char *encoded_interval = yf_url_encode(interval);
+    char *encoded_range = yf_url_encode(range);
+    if (!encoded_symbol || !encoded_interval || !encoded_range) {
+        curl_free(encoded_symbol);
+        curl_free(encoded_interval);
+        curl_free(encoded_range);
         return YFErrNomem;
     }
 
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, yf_write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, client->user_agent ? client->user_agent : YF_DEFAULT_USER_AGENT);
-    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
-
-    {
-        CURLcode curl_result = curl_easy_perform(curl);
-        response->curl_code = (int)curl_result;
-        if (curl_result != CURLE_OK) {
-            status = YFErrCurl;
-            free(buffer.data);
-            buffer.data = NULL;
-            buffer.size = 0;
-            goto cleanup;
-        }
+    char suffix[128];
+    int written = snprintf(suffix, sizeof(suffix), "?interval=%s&range=%s",
+                           encoded_interval, encoded_range);
+    curl_free(encoded_interval);
+    curl_free(encoded_range);
+    if (written < 0 || (size_t)written >= sizeof(suffix)) {
+        curl_free(encoded_symbol);
+        return YFErrNomem;
     }
 
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response->http_code);
-    response->data = buffer.data;
-    response->size = buffer.size;
-    buffer.data = NULL;
+    const char *base = client->base_url ? client->base_url : YF_DEFAULT_BASE_URL;
+    char *url = yf_url_concat(base, encoded_symbol, suffix);
+    curl_free(encoded_symbol);
+    if (!url) {
+        return YFErrNomem;
+    }
 
-cleanup:
+    YFStatus status = yf_http_get(client, url, 30L, response);
     free(url);
-    curl_easy_cleanup(curl);
-    if (status != YFOk && buffer.data) {
-        free(buffer.data);
-    }
     return status;
 }
 
