@@ -1,6 +1,6 @@
-# Market Analyzer
+# Stock Data Explorer (WIP)
 
-A C project for a stock market analyzer using [Dear ImGui](https://github.com/ocornut/imgui) through [cimgui](https://github.com/cimgui/cimgui), with GLFW/OpenGL for rendering and [ImPlot](https://github.com/epezent/implot) for charting.
+A C project for visualising stock market data using [Dear ImGui](https://github.com/ocornut/imgui) through [cimgui](https://github.com/cimgui/cimgui), with GLFW/OpenGL for rendering and [ImPlot](https://github.com/epezent/implot) for charting.
 
 Stock price data is fetched using the Yahoo Finance chart API.
 
