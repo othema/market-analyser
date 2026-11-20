@@ -58,7 +58,6 @@ bool ui_backend_init(UiBackend *ui, const char *title, int width, int height) {
 
     ImGui_ImplGlfw_InitForOpenGL(ui->window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
-    (void)glsl_version;
 
     ui->imgui_ready = true;
     return true;

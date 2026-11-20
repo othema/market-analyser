@@ -210,7 +210,7 @@ void fetch_service_poll(FetchService *svc) {
     yf_time_series_free(&series);
 }
 
-void fetch_service_get_status(const FetchService *svc, FetchStatusSnapshot *out) {
+void fetch_service_get_status(FetchService *svc, FetchStatusSnapshot *out) {
     if (!out) {
         return;
     }
@@ -221,11 +221,11 @@ void fetch_service_get_status(const FetchService *svc, FetchStatusSnapshot *out)
         out->state = FetchUiError;
         return;
     }
-    pthread_mutex_lock((pthread_mutex_t *)&svc->stock.mutex);
+    pthread_mutex_lock(&svc->stock.mutex);
     out->in_progress = svc->stock.in_progress;
     out->state = svc->stock.ui_state;
     snprintf(out->status_text, sizeof(out->status_text), "%s", svc->stock.status_text);
-    pthread_mutex_unlock((pthread_mutex_t *)&svc->stock.mutex);
+    pthread_mutex_unlock(&svc->stock.mutex);
 }
 
 static void *suggestion_thread_main(void *arg) {
@@ -296,7 +296,7 @@ void fetch_service_request_suggestions(FetchService *svc, const char *query) {
     pthread_mutex_unlock(&svc->suggest.mutex);
 }
 
-void fetch_service_get_suggestions(const FetchService *svc, const char *current_query, SuggestionSnapshot *out) {
+void fetch_service_get_suggestions(FetchService *svc, const char *current_query, SuggestionSnapshot *out) {
     if (!out) {
         return;
     }
@@ -305,7 +305,7 @@ void fetch_service_get_suggestions(const FetchService *svc, const char *current_
         return;
     }
 
-    pthread_mutex_lock((pthread_mutex_t *)&svc->suggest.mutex);
+    pthread_mutex_lock(&svc->suggest.mutex);
     out->in_progress = svc->suggest.in_progress;
     bool matches = (strncmp(svc->suggest.last_applied_query, current_query, sizeof(svc->suggest.last_applied_query)) == 0);
     if (matches) {
@@ -322,7 +322,7 @@ void fetch_service_get_suggestions(const FetchService *svc, const char *current_
         }
         out->count = w;
     }
-    pthread_mutex_unlock((pthread_mutex_t *)&svc->suggest.mutex);
+    pthread_mutex_unlock(&svc->suggest.mutex);
 }
 
 bool fetch_service_yf_ready(const FetchService *svc) {

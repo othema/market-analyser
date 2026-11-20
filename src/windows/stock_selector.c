@@ -31,12 +31,6 @@ void stock_selector_render(AppState *app, char *ticker, int ticker_size) {
     if (app && input_changed) {
         fetch_service_request_suggestions(&app->fetch, ticker);
     }
-    if (app && ticker && ticker[0] != '\0' && input_changed) {
-        // request already sent above when changed
-    } else if (app && ticker && ticker[0] != '\0') {
-        // allow retry/start if query differs from last requested/applied in service snapshot terms
-        fetch_service_request_suggestions(&app->fetch, ticker);
-    }
 
     SuggestionSnapshot suggestions = {0};
     if (app) {

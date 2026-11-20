@@ -85,10 +85,10 @@ void fetch_service_shutdown(FetchService *svc);
 
 bool fetch_service_start_stock(FetchService *svc, const char *ticker, const char *interval, const char *range);
 void fetch_service_poll(FetchService *svc);
-void fetch_service_get_status(const FetchService *svc, FetchStatusSnapshot *out);
+void fetch_service_get_status(FetchService *svc, FetchStatusSnapshot *out);
 
 void fetch_service_request_suggestions(FetchService *svc, const char *query);
-void fetch_service_get_suggestions(const FetchService *svc, const char *current_query, SuggestionSnapshot *out);
+void fetch_service_get_suggestions(FetchService *svc, const char *current_query, SuggestionSnapshot *out);
 bool fetch_service_yf_ready(const FetchService *svc);
 
 #endif // FETCH_SERVICE_H
