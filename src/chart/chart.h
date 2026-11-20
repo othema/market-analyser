@@ -27,22 +27,19 @@ typedef struct {
 } ChartState;
 
 // Initializes a ChartState to an empty, safe-to-clear state.
-// Returns nothing.
 void chart_state_init(ChartState *chart);
 
 // Releases all heap memory owned by a ChartState and resets it to empty.
-// Safe to call on an empty or already-cleared state. Returns nothing.
+// Safe to call on an empty or already-cleared state.
 void chart_state_clear(ChartState *chart);
 
 // Replaces chart contents with OHLC data copied from a parsed Yahoo Finance time series.
 // Series points are expected in chronological order (oldest to newest).
 // On failure, leaves the chart cleared.
-// Returns true on success, or false on invalid input or allocation failure.
 bool chart_state_set_from_yf_time_series(ChartState *chart, const char *ticker, const YFTimeSeries *series);
 
 // Sets company display information on the chart state.
 // Any NULL string argument leaves the corresponding field unchanged/cleared appropriately.
-// Returns nothing.
 void chart_state_set_company_info(ChartState *chart,
                                   const char *company_name,
                                   const char *exchange,
@@ -51,7 +48,6 @@ void chart_state_set_company_info(ChartState *chart,
                                   const char *industry,
                                   const char *logo_url);
 
-// Returns true if the chart has plottable OHLC data, otherwise false.
 bool chart_state_has_data(const ChartState *chart);
 
 #endif // CHART_H

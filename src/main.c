@@ -4,7 +4,6 @@
 
 // Application entry point.
 // Initializes and runs the UI, then shuts down.
-// Returns 0 on success, or 1 on initialization failure.
 int main(void) {
     AppState app = {0};
     if (!app_init(&app)) {

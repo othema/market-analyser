@@ -28,67 +28,55 @@ typedef struct PlotRectD {
 } PlotRectD;
 
 // Creates the global ImPlot context.
-// Must be called after the ImGui context is created. Returns nothing.
+// Must be called after the ImGui context is created.
 void plot_create_context(void);
 
 // Destroys the current ImPlot context.
-// Should be called before the ImGui context is destroyed. Returns nothing.
+// Should be called before the ImGui context is destroyed.
 void plot_destroy_context(void);
 
 // Begins a 2D ImPlot plot with the given title and size.
 // If this returns true, plot_end() must be called.
 // size.x/size.y <= 0 use default/auto sizing.
-// Returns true if the plot is visible and ready for drawing, otherwise false.
 bool plot_begin(const char *title_id, PlotVec2 size, int flags);
 
 // Ends the current ImPlot plot.
-// Must only be called when plot_begin() returned true. Returns nothing.
+// Must only be called when plot_begin() returned true.
 void plot_end(void);
 
 // Sets up X and Y axes labels and flags for the current plot.
-// Returns nothing.
 void plot_setup_axes(const char *x_label, const char *y_label, int x_flags, int y_flags);
 
 // Sets the scale for a plot axis.
 // axis: 0 = X1, 1 = X2, 2 = X3, 3 = Y1, 4 = Y2, 5 = Y3.
 // scale: ImPlotScale value (for example 1 = ImPlotScale_Time in ImPlot v0.17).
-// Returns nothing.
 void plot_setup_axis_scale(int axis, int scale);
 
 // Sets custom tick positions and labels for an axis.
 // labels may be NULL to keep default labels for the provided tick positions.
-// Returns nothing.
 void plot_setup_axis_ticks(int axis, const double *values, int n_ticks, const char *const *labels);
 
 // Sets axis limits for the current plot on X1 and Y1 axes.
 // cond controls when limits are applied (for example ImPlotCond values).
-// Returns nothing.
 void plot_setup_axes_limits(double x_min, double x_max, double y_min, double y_max, int cond);
 
-// Returns the ImDrawList used by the current ImPlot plot for custom drawing.
-// Returns an opaque pointer to the active draw list, or NULL if unavailable.
 void *plot_get_draw_list(void);
 
 // Converts plot-space coordinates (x, y) to pixel-space coordinates for X1/Y1 axes.
-// Returns the pixel position as a PlotVec2.
 PlotVec2 plot_to_pixels(double x, double y);
 
 // Plots a line series using X1/Y1 axes.
-// flags can be 0 for default styling. Returns nothing.
+// flags can be 0 for default styling.
 void plot_plot_line(const char *label_id, const double *xs, const double *ys, int count, int flags);
 
 // Sets the color/style for the next plotted line item.
-// Returns nothing.
 void plot_set_next_line_style(float r, float g, float b, float a, float weight);
 
-// Returns true if the current plot area is hovered.
 bool plot_is_hovered(void);
 
-// Returns the mouse position in plot coordinates for the given axes.
 // axis constants: 0 = X1, 3 = Y1 (ImAxis values), use -1 for IMPLOT_AUTO.
 PlotPointD plot_get_mouse_pos(int x_axis, int y_axis);
 
-// Returns the current plot limits for the given axes.
 // axis constants: 0 = X1, 3 = Y1 (ImAxis values), use -1 for IMPLOT_AUTO.
 PlotRectD plot_get_plot_limits(int x_axis, int y_axis);
 

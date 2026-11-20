@@ -99,7 +99,6 @@ YFStatus yf_http_get(const YFClient *client, const char *url,
 }
 
 // Initializes global libcurl state required by this interface.
-// Returns YFOk on success, or YFErrCurlInit on failure.
 YFStatus yf_global_init(void) {
     CURLcode result = curl_global_init(CURL_GLOBAL_DEFAULT);
     if (result != CURLE_OK) {
@@ -109,13 +108,11 @@ YFStatus yf_global_init(void) {
 }
 
 // Releases global libcurl state initialized by yf_global_init.
-// Returns nothing.
 void yf_global_cleanup(void) {
     curl_global_cleanup();
 }
 
 // Initializes a YFClient with default base URL and user agent.
-// Returns YFOk on success, or YFErrInvalidArg for invalid input.
 YFStatus yf_client_init(YFClient *client) {
     if (!client) {
         return YFErrInvalidArg;
@@ -127,7 +124,7 @@ YFStatus yf_client_init(YFClient *client) {
 }
 
 // Releases resources owned by a YFClient and resets its fields.
-// Does not free the client struct itself. Returns nothing.
+// Does not free the client struct itself.
 void yf_client_cleanup(YFClient *client) {
     if (!client) {
         return;
@@ -138,7 +135,6 @@ void yf_client_cleanup(YFClient *client) {
 }
 
 // Initializes a YFResponse for use with query functions.
-// Returns nothing.
 void yf_response_init(YFResponse *response) {
     if (!response) {
         return;
@@ -151,7 +147,7 @@ void yf_response_init(YFResponse *response) {
 }
 
 // Frees memory owned by a YFResponse and resets its fields.
-// Safe to call on an empty or already-freed response. Returns nothing.
+// Safe to call on an empty or already-freed response.
 void yf_response_free(YFResponse *response) {
     if (!response) {
         return;
@@ -206,7 +202,6 @@ YFStatus yf_fetch_chart(YFClient *client,
     return status;
 }
 
-// Returns a human-readable string naming the given YFStatus code.
 // The returned pointer refers to static storage and must not be freed.
 const char *yf_status_str(YFStatus status) {
     switch (status) {

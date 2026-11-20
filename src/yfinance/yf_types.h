@@ -46,11 +46,11 @@ typedef struct {
 } YFSearchResult;
 
 // Frees all memory owned by an array of YFSearchResult items.
-// Safe to call with NULL or count 0. Returns nothing.
+// Safe to call with NULL or count 0.
 void yf_search_results_free(YFSearchResult *results, size_t count);
 
 // Frees all memory owned by a YFTimeSeries and resets its fields.
-// Safe to call on an empty or already-freed series. Returns nothing.
+// Safe to call on an empty or already-freed series.
 void yf_time_series_free(YFTimeSeries *series);
 
 #ifdef __cplusplus

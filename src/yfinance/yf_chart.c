@@ -10,7 +10,6 @@
 #include <time.h>
 
 // Duplicates a NUL-terminated string onto the heap.
-// Returns a newly allocated copy on success, or NULL if s is NULL or allocation fails.
 static char *yf_strdup_safe(const char *s) {
     if (!s) {
         return NULL;
@@ -27,7 +26,7 @@ static char *yf_strdup_safe(const char *s) {
 }
 
 // Frees all memory owned by a YFTimeSeries and resets its fields.
-// Safe to call on an empty or already-freed series. Returns nothing.
+// Safe to call on an empty or already-freed series.
 void yf_time_series_free(YFTimeSeries *series) {
     if (!series) {
         return;
@@ -61,7 +60,7 @@ void yf_time_series_free(YFTimeSeries *series) {
 }
 
 // Frees all memory owned by an array of YFSearchResult items.
-// Safe to call with NULL or count 0. Returns nothing.
+// Safe to call with NULL or count 0.
 void yf_search_results_free(YFSearchResult *results, size_t count) {
     if (!results) {
         return;
@@ -77,7 +76,6 @@ void yf_search_results_free(YFSearchResult *results, size_t count) {
 }
 
 // Formats a Unix timestamp (seconds, UTC) as YYYY-MM-DD.
-// Returns a heap-allocated string on success, or NULL on failure.
 static char *yf_format_unix_date(int64_t timestamp_seconds) {
     time_t raw_time = (time_t)timestamp_seconds;
     struct tm *utc_time = gmtime(&raw_time);
@@ -99,7 +97,6 @@ static char *yf_format_unix_date(int64_t timestamp_seconds) {
 }
 
 // Reads a number value from a json-c array element as double.
-// Returns 1 on success and stores value in *out, or 0 if null/missing/invalid.
 static int yf_json_array_get_double(struct json_object *array_obj, size_t index, double *out) {
     if (out) {
         *out = 0.0;
@@ -121,7 +118,6 @@ static int yf_json_array_get_double(struct json_object *array_obj, size_t index,
 }
 
 // Reads an integer value from a json-c array element as long long.
-// Returns 1 on success and stores value in *out, or 0 if null/missing/invalid.
 static int yf_json_array_get_int64(struct json_object *array_obj, size_t index, long long *out) {
     if (out) {
         *out = 0;
@@ -143,7 +139,6 @@ static int yf_json_array_get_int64(struct json_object *array_obj, size_t index, 
 }
 
 // Copies a string field from a json-c object if present.
-// Returns nothing.
 static void yf_copy_json_string_field(struct json_object *obj, const char *key, char **out_field) {
     if (!out_field) {
         return;
@@ -163,7 +158,6 @@ static void yf_copy_json_string_field(struct json_object *obj, const char *key, 
 }
 
 // Extracts chart error description from Yahoo Finance chart JSON, if present.
-// Returns a heap-allocated message string or NULL if unavailable.
 static char *yf_extract_chart_error_message(struct json_object *root) {
     if (!root || !json_object_is_type(root, json_type_object)) {
         return NULL;
@@ -195,7 +189,6 @@ static char *yf_extract_chart_error_message(struct json_object *root) {
 
 // Parses Yahoo Finance chart JSON into a YFTimeSeries.
 // On success, fills *out (caller must free with yf_time_series_free).
-// Returns YFOk on success, or a YFErr* status on failure.
 YFStatus yf_parse_chart_json(const char *json_data, YFTimeSeries *out) {
     if (!json_data || !out) {
         return YFErrInvalidArg;
@@ -349,7 +342,6 @@ YFStatus yf_parse_chart_json(const char *json_data, YFTimeSeries *out) {
 // Fetches and parses a chart time series for a symbol.
 // interval examples: "1d", "1wk", "1mo". range examples: "1mo", "6mo", "1y", "5y", "max".
 // On success, fills *out (caller must free with yf_time_series_free).
-// Returns YFOk on success, or a YFErr* status on failure.
 YFStatus yf_get_time_series(YFClient *client,
                             const char *symbol,
                             const char *interval,
@@ -380,7 +372,6 @@ YFStatus yf_get_time_series(YFClient *client,
 }
 
 // Sets a heap-allocated string field if replacement is non-NULL/non-empty.
-// Returns nothing.
 static void yf_set_string_field_if_present(char **field, const char *value) {
     if (!field || !value || value[0] == '\0') {
         return;
